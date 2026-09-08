@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "name": "@mimo-ai/shared",
   "type": "module",
   "license": "MIT",
