@@ -4,8 +4,8 @@ export const OPENROUTER_FREE_PROVIDER_ID = "openrouter-free"
 export const OPENROUTER_FREE_MODEL_ID = "free"
 export const OPENROUTER_FREE_REF = `${OPENROUTER_FREE_PROVIDER_ID}/${OPENROUTER_FREE_MODEL_ID}`
 
-/** Max models sent in one OpenRouter native `models[]` request. */
-export const OPENROUTER_FREE_NATIVE_MAX = 16
+/** Max models in one OpenRouter native `models[]` request (API hard limit: 3). */
+export const OPENROUTER_FREE_NATIVE_MAX = 3
 
 export type OpenRouterFreeCandidate = {
   id: string

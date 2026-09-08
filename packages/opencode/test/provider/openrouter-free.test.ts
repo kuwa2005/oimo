@@ -3,6 +3,7 @@ import {
   isOpenRouterFreeRef,
   isOpenRouterFreeModel,
   OPENROUTER_FREE_REF,
+  OPENROUTER_FREE_NATIVE_MAX,
   resolveOpenRouterFreeCandidates,
   sortCatalogCandidates,
   catalog,
@@ -34,6 +35,12 @@ function model(providerID: string, id: string): Model {
     variants: {},
   }
 }
+
+describe("openrouter-free.catalog", () => {
+  test("native models[] respects OpenRouter API limit of 3", () => {
+    expect(OPENROUTER_FREE_NATIVE_MAX).toBe(3)
+  })
+})
 
 describe("openrouter-free.ids", () => {
   test("virtual ref", () => {

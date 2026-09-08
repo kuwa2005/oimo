@@ -19,7 +19,7 @@ bun script/sync-openrouter-free-catalog.ts
 
 ## フォールバック（二段）
 
-1. **OpenRouter ネイティブ** — 1 リクエストで `models[]` に最大 16 件を渡し、OpenRouter 側で切替
+1. **OpenRouter ネイティブ** — 1 リクエストで `models[]` に **最大 3 件**（OpenRouter API 上限）を渡し、OpenRouter 側で切替
 2. **oimo クライアント** — first-frame 規則で候補を 1 件ずつ試行（Auto(無料) と同型）
 
 ## 設定 (`oimo.json`)
