@@ -98,6 +98,8 @@ export function DialogModel(props: { providerID?: string }) {
 
     // Auto Model (free) + mimo/xiaomi pinned at top (after favorites/recents)
     const autoProvider = sync.data.provider.find((p) => p.id === "auto")
+    const openRouterFreeProvider = sync.data.provider.find((p) => p.id === "openrouter-free")
+    const openRouterProvider = sync.data.provider.find((p) => p.id === "openrouter")
     const mimoProvider = sync.data.provider.find((p) => p.id === "mimo")
     const xiaomiProvider = sync.data.provider.find((p) => p.id === "xiaomi")
     const pinnedCategory = xiaomiProvider?.name ?? "MiMo"
@@ -133,9 +135,34 @@ export function DialogModel(props: { providerID?: string }) {
           ]
         : []
 
+    const openRouterFreePinned =
+      showAutoPin &&
+      openRouterFreeProvider &&
+      "free" in openRouterFreeProvider.models &&
+      (!showSections || !inShortcuts("openrouter-free", "free"))
+        ? [
+            {
+              value: { providerID: "openrouter-free", modelID: "free" },
+              title: openRouterFreeProvider.models["free"]?.name ?? "OpenRouter (無料・API KEY必要)",
+              description: t("tui.dialog.model.openrouter_free_desc"),
+              category: "OpenRouter",
+              disabled: !openRouterProvider,
+              footer: "Free" as "Free" | "API" | undefined,
+              onSelect() {
+                if (openRouterProvider) {
+                  onSelect("openrouter-free", "free")
+                  return
+                }
+                dialog.replace(() => <DialogAutoFreeSetup />)
+              },
+            },
+          ]
+        : []
+
     const pinnedOptions = showPinned
       ? [
           ...autoPinned,
+          ...openRouterFreePinned,
           // mimo-free model
           ...(mimoProvider && "mimo-auto" in mimoProvider.models && mimoProvider.models["mimo-auto"].status !== "deprecated" && (!showSections || !inShortcuts("mimo", "mimo-auto"))
             ? [
@@ -191,7 +218,7 @@ export function DialogModel(props: { providerID?: string }) {
               ]
             : []),
         ]
-      : autoPinned
+      : [...autoPinned, ...openRouterFreePinned]
 
     const providerOptions = pipe(
       sync.data.provider,
@@ -199,6 +226,7 @@ export function DialogModel(props: { providerID?: string }) {
       filter(
         (provider) =>
           !(showAutoPin && provider.id === "auto") &&
+          !(showAutoPin && provider.id === "openrouter-free") &&
           !(showPinned && (provider.id === "xiaomi" || provider.id === "mimo")),
       ),
       sortBy(

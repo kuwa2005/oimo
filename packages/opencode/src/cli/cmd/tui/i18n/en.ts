@@ -439,6 +439,7 @@ export const dict: Record<string, string> = {
   "tui.dialog.auto_mode.error": "Failed to switch auto mode ({{status}})",
   "tui.dialog.model.auto_free_setup": "Add free provider keys…",
   "tui.dialog.model.auto_free_setup_desc": "OpenRouter / NVIDIA / Groq account + API key helper",
+  "tui.dialog.model.openrouter_free_desc": "Auto-switch OpenRouter :free models (OPENROUTER_API_KEY required)",
   "tui.model.mimo_auto.name": "MiMo Auto (MiMo-V2.5 free until Jul 26, 18:00 · UTC+8)",
   "tui.model.mimo_auto.sunset_name": "MiMo Auto (MiMo-V2.5)",
   "tui.dialog.token_plan.title": "Subscribe to a Token Plan or wait in queue",

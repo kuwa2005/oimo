@@ -31,6 +31,16 @@ import {
   rememberAutoFreeSuccess,
   reorderAutoFreeCandidates,
 } from "@/provider/auto-free"
+import {
+  isOpenRouterFreeModel,
+  isOpenRouterFreeFailoverAdvanceError,
+  isOpenRouterFreeCandidateUnavailableError,
+  OPENROUTER_FREE_NATIVE_MAX,
+  rememberOpenRouterFreeBad,
+  rememberOpenRouterFreeFailure,
+  rememberOpenRouterFreeSuccess,
+  reorderOpenRouterFreeCandidates,
+} from "@/provider/openrouter-free"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecoverableError } from "@/tool/recoverable"
@@ -929,7 +939,7 @@ export const layer: Layer.Layer<
         }
 
         return yield* Effect.gen(function* () {
-          if (!isAutoFreeModel(streamInput.model)) {
+          if (!isAutoFreeModel(streamInput.model) && !isOpenRouterFreeModel(streamInput.model)) {
             // OpenCode-style backoff 1s,2s,4s,… ; when the next wait would exceed
             // 5 minutes, stop and let halt surface the recover dialog.
             yield* drain(streamInput.model, {
@@ -937,7 +947,7 @@ export const layer: Layer.Layer<
               catchHalt: true,
               maxWaitMs: SessionRetry.RETRY_MODEL_SWITCH_MS,
             })
-          } else {
+          } else if (isAutoFreeModel(streamInput.model)) {
             // Rank by local excellence stats; short cooldown after rate-limit only
             // (no sticky last-winner — big-pickle returns when cooldown ends).
             // Once per process: first Auto Free stream probes Big Pickle first,
@@ -1054,6 +1064,161 @@ export const layer: Layer.Layer<
                 isMain && SessionRetry.isRetryableTransientError(lastError)
                   ? new Error(
                       `メインが停止しました: 無料モデルの Rate limit / 一時障害を使い切りました。再試行するか、モデルを切り替えてください。 (${detail})`,
+                      { cause: lastError },
+                    )
+                  : isMain
+                    ? new Error(`メインが停止しました: ${detail}`, { cause: lastError })
+                    : lastError
+              yield* halt(wrapped)
+            }
+          } else {
+            const candidates = reorderOpenRouterFreeCandidates(yield* provider.resolveOpenRouterFree())
+            if (candidates.length === 0) {
+              throw new Error(
+                "OpenRouter (無料): 利用可能な無料モデルがありません。OPENROUTER_API_KEY を設定してください。",
+              )
+            }
+            slog.info("openrouter-free candidates", {
+              count: candidates.length,
+              refs: candidates.map((m) => `${m.providerID}/${m.id}`),
+            })
+
+            let lastError: unknown
+            let succeeded = false
+            let noticePartID: PartID | undefined
+            let skipClientLoop = false
+
+            const runCandidate = function* (candidate: Provider.Model, label?: string) {
+              const ref = `${candidate.providerID}/${candidate.id}`
+              ctx.assistantMessage.providerID = candidate.providerID
+              ctx.assistantMessage.modelID = candidate.id
+              yield* session.updateMessage(ctx.assistantMessage)
+              if (noticePartID) {
+                yield* session.removePart({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.id,
+                  partID: noticePartID,
+                })
+                noticePartID = undefined
+              }
+              noticePartID = PartID.ascending()
+              yield* session.updatePart({
+                id: noticePartID,
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.sessionID,
+                type: "text",
+                text: `OpenRouter (無料) -> ${ref}${label ? ` (${label})` : ""}\n`,
+                synthetic: true,
+                time: { start: Date.now(), end: Date.now() },
+              })
+
+              let committed = false
+              return yield* drain(candidate, {
+                withSessionRetry: true,
+                catchHalt: false,
+                maxWaitMs: SessionRetry.RETRY_MODEL_SWITCH_MS,
+                onCommit: () => {
+                  committed = true
+                },
+              }).pipe(Effect.exit, Effect.map((exit) => ({ exit, ref, committed })))
+            }
+
+            if (candidates.length > 1) {
+              const nativeIds = candidates
+                .slice(0, OPENROUTER_FREE_NATIVE_MAX)
+                .map((c) => c.api.id)
+              const primary = candidates[0]!
+              const nativeModel: Provider.Model = {
+                ...primary,
+                options: { ...primary.options, models: nativeIds },
+              }
+              const native = yield* runCandidate(nativeModel, "native models[]")
+              if (Exit.isSuccess(native.exit)) {
+                succeeded = true
+                rememberOpenRouterFreeSuccess(native.ref)
+                slog.info("openrouter-free native", { refs: nativeIds })
+              } else {
+                lastError = Cause.squash(native.exit.cause)
+                const advance = isOpenRouterFreeFailoverAdvanceError(lastError)
+                const unavailable = isOpenRouterFreeCandidateUnavailableError(lastError)
+                const toolsStarted = Object.keys(ctx.toolcalls).length > 0
+                const canAdvance = advance && (!native.committed || !toolsStarted)
+                if (!canAdvance) {
+                  skipClientLoop = true
+                  if (unavailable) rememberOpenRouterFreeBad(native.ref)
+                  else if (advance) rememberOpenRouterFreeFailure(native.ref)
+                } else {
+                  if (unavailable) rememberOpenRouterFreeBad(native.ref)
+                  else rememberOpenRouterFreeFailure(native.ref)
+                  yield* clearStepParts
+                  slog.info("openrouter-free native failover exhausted", { from: native.ref })
+                }
+              }
+            }
+
+            if (!succeeded && !skipClientLoop) {
+              const clientCandidates = candidates.map((c, index) => {
+                if (index !== 0 || candidates.length <= 1) return c
+                return {
+                  ...c,
+                  options: Object.fromEntries(
+                    Object.entries(c.options ?? {}).filter(([key]) => key !== "models"),
+                  ),
+                }
+              })
+              for (let index = 0; index < clientCandidates.length; index++) {
+                const candidate = clientCandidates[index]!
+                const result = yield* runCandidate(candidate, index === 0 ? undefined : "client")
+                if (Exit.isSuccess(result.exit)) {
+                  succeeded = true
+                  rememberOpenRouterFreeSuccess(result.ref)
+                  slog.info("openrouter-free using", { ref: result.ref })
+                  break
+                }
+
+                lastError = Cause.squash(result.exit.cause)
+                const hasNext = index + 1 < clientCandidates.length
+                const advance = isOpenRouterFreeFailoverAdvanceError(lastError)
+                const unavailable = isOpenRouterFreeCandidateUnavailableError(lastError)
+                const toolsStarted = Object.keys(ctx.toolcalls).length > 0
+                const canAdvance = advance && hasNext && (!result.committed || !toolsStarted)
+                if (!canAdvance) {
+                  if (unavailable) rememberOpenRouterFreeBad(result.ref)
+                  else if (advance) rememberOpenRouterFreeFailure(result.ref)
+                  break
+                }
+
+                if (unavailable) rememberOpenRouterFreeBad(result.ref)
+                else rememberOpenRouterFreeFailure(result.ref)
+                yield* clearStepParts
+                const next = clientCandidates[index + 1]!
+                slog.info("openrouter-free failover", {
+                  from: result.ref,
+                  to: `${next.providerID}/${next.id}`,
+                  reason: result.committed ? "retryable-reasoning-only" : "retryable-pre-commit",
+                })
+                if (isMain) {
+                  yield* status.set(ctx.sessionID, {
+                    type: "retry",
+                    attempt: index + 1,
+                    message: `OpenRouter free · switching -> ${next.providerID}/${next.id}`,
+                    next: Date.now(),
+                  })
+                }
+              }
+            }
+
+            if (!succeeded && lastError !== undefined) {
+              const detail =
+                lastError instanceof Error
+                  ? lastError.message
+                  : typeof lastError === "string"
+                    ? lastError
+                    : "unknown provider error"
+              const wrapped =
+                isMain && SessionRetry.isRetryableTransientError(lastError)
+                  ? new Error(
+                      `メインが停止しました: OpenRouter 無料モデルの Rate limit / 一時障害を使い切りました。再試行するか、モデルを切り替えてください。 (${detail})`,
                       { cause: lastError },
                     )
                   : isMain

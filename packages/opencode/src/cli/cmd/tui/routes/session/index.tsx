@@ -1841,6 +1841,14 @@ function AssistantMessage(props: {
     ) {
       return { kind: "auto-free" as const, resolved }
     }
+    if (
+      parent?.role === "user" &&
+      parent.model.providerID === "openrouter-free" &&
+      parent.model.modelID === "free" &&
+      !(props.message.providerID === "openrouter-free" && props.message.modelID === "free")
+    ) {
+      return { kind: "openrouter-free" as const, resolved }
+    }
     return { kind: "plain" as const, label: resolved }
   })
 
@@ -1981,7 +1989,9 @@ function AssistantMessage(props: {
                 {Locale.titlecase(props.message.mode)}
               </text>
               <Show
-                when={model().kind === "auto-free" ? model() : undefined}
+                when={
+                  model().kind === "auto-free" || model().kind === "openrouter-free" ? model() : undefined
+                }
                 fallback={
                   <text wrapMode="none" fg={theme.textMuted}>
                     {" | "}
@@ -1992,13 +2002,13 @@ function AssistantMessage(props: {
                 {(m) => (
                   <>
                     <text wrapMode="none" fg={theme.textMuted}>
-                      {" | Auto Model ("}
+                      {m().kind === "openrouter-free" ? " | OpenRouter (" : " | Auto Model ("}
                     </text>
                     <text wrapMode="none" fg={theme.textMuted}>
                       無料
                     </text>
                     <text wrapMode="none" fg={theme.textMuted}>
-                      {`) -> ${m().kind === "auto-free" ? m().resolved : ""}`}
+                      {`) -> ${m().resolved}`}
                     </text>
                   </>
                 )}

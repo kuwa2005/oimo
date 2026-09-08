@@ -188,6 +188,22 @@ const InfoSchema = Schema.Struct({
     description:
       "Auto (free) router settings. See docs/auto-free-fcc-sync.md. Future auto/paid and auto/hybrid: docs/auto-mode-roadmap.md",
   }),
+  openrouter_free: Schema.optional(
+    Schema.Struct({
+      fallbacks: Schema.optional(Schema.mutable(Schema.Array(ConfigModelID))).annotate({
+        description:
+          "Ordered openrouter/model refs for openrouter-free/free. When set, replaces the bundled API-synced catalog.",
+      }),
+      preferred_order: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description: "Override try-order among bundled OpenRouter :free models (model ids without openrouter/ prefix).",
+      }),
+      sync_ttl_hours: Schema.optional(PositiveInt).annotate({
+        description: "Reserved: runtime refresh TTL for OpenRouter free catalog (build-time sync is default).",
+      }),
+    }),
+  ).annotate({
+    description: "OpenRouter (free) router settings. Requires OPENROUTER_API_KEY. See docs/openrouter-free.md.",
+  }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",

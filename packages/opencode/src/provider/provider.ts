@@ -35,6 +35,14 @@ import {
   resolveAutoFreeCandidates,
   reorderAutoFreeCandidates,
 } from "./auto-free"
+import {
+  OPENROUTER_FREE_PROVIDER_ID,
+  openRouterFreeProviderInfo,
+  isOpenRouterFreeModel,
+  resolveOpenRouterFreeCandidates,
+  reorderOpenRouterFreeCandidates,
+  mergeOpenRouterFreeCatalog,
+} from "./openrouter-free"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -1127,6 +1135,7 @@ export interface Interface {
   readonly resolveModelRef: (ref: string, contextProviderID?: ProviderID) => Effect.Effect<Model>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
   readonly resolveAutoFree: () => Effect.Effect<Model[]>
+  readonly resolveOpenRouterFree: () => Effect.Effect<Model[]>
 }
 
 interface State {
@@ -1667,6 +1676,13 @@ const layer: Layer.Layer<
           providers[autoID] = autoFreeProviderInfo()
         }
 
+        mergeOpenRouterFreeCatalog(providers[ProviderID.openrouter])
+
+        const openRouterFreeID = ProviderID.make(OPENROUTER_FREE_PROVIDER_ID)
+        if (!disabled.has(openRouterFreeID) && isProviderAllowed(openRouterFreeID)) {
+          providers[openRouterFreeID] = openRouterFreeProviderInfo()
+        }
+
         return {
           models: languages,
           speech: speeches,
@@ -1869,6 +1885,16 @@ const layer: Layer.Layer<
         }
         model = upstream
       }
+      if (isOpenRouterFreeModel(model)) {
+        const candidates = reorderOpenRouterFreeCandidates(yield* resolveOpenRouterFree())
+        const upstream = candidates[0]
+        if (!upstream) {
+          throw new Error(
+            "OpenRouter (free): no available free model candidates — set OPENROUTER_API_KEY and connect OpenRouter",
+          )
+        }
+        model = upstream
+      }
       const s = yield* InstanceState.get(state)
       const envs = yield* env.all()
       const key = `${model.providerID}/${model.id}`
@@ -1969,6 +1995,16 @@ const layer: Layer.Layer<
         }
       }
       return undefined
+    })
+
+    const resolveOpenRouterFree = Effect.fn("Provider.resolveOpenRouterFree")(function* () {
+      const cfg = yield* config.get()
+      const s = yield* InstanceState.get(state)
+      return resolveOpenRouterFreeCandidates({
+        fallbacks: cfg.openrouter_free?.fallbacks,
+        preferred_order: cfg.openrouter_free?.preferred_order,
+        providers: s.providers,
+      })
     })
 
     const resolveAutoFree = Effect.fn("Provider.resolveAutoFree")(function* () {
@@ -2120,6 +2156,7 @@ const layer: Layer.Layer<
       defaultModel,
       resolveModelRef,
       resolveAutoFree,
+      resolveOpenRouterFree,
     })
   }),
 )

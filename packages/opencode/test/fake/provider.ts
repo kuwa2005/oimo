@@ -60,6 +60,7 @@ export namespace ProviderTest {
       getVisionModel,
       defaultModel,
       resolveAutoFree,
+      resolveOpenRouterFree,
     } = override
     return {
       model: mdl,
@@ -126,6 +127,9 @@ export namespace ProviderTest {
           resolveAutoFree:
             resolveAutoFree ??
             Effect.fn("TestProvider.resolveAutoFree")(() => Effect.succeed([mdl])),
+          resolveOpenRouterFree:
+            resolveOpenRouterFree ??
+            Effect.fn("TestProvider.resolveOpenRouterFree")(() => Effect.succeed([mdl])),
         }),
       ),
     }
