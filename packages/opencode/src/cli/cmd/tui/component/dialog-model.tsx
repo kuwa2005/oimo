@@ -96,36 +96,58 @@ export function DialogModel(props: { providerID?: string }) {
       "Recent",
     )
 
-    // Auto Model (free) + mimo/xiaomi pinned at top (after favorites/recents)
     const autoProvider = sync.data.provider.find((p) => p.id === "auto")
     const openRouterFreeProvider = sync.data.provider.find((p) => p.id === "openrouter-free")
     const openRouterProvider = sync.data.provider.find((p) => p.id === "openrouter")
     const mimoProvider = sync.data.provider.find((p) => p.id === "mimo")
     const xiaomiProvider = sync.data.provider.find((p) => p.id === "xiaomi")
     const pinnedCategory = xiaomiProvider?.name ?? "MiMo"
-    // Auto Model is always pin-worthy (zero-config free router). MiMo pins when connected.
-    const showAutoPin = !props.providerID
-    const showPinned = connected() && !props.providerID
+    const showFreeSection = !props.providerID
 
-    const autoPinned =
-      showAutoPin && autoProvider && "free" in autoProvider.models && (!showSections || !inShortcuts("auto", "free"))
+    const freeNoConfigOptions =
+      showFreeSection && showSections && autoProvider && "free" in autoProvider.models && !inShortcuts("auto", "free")
         ? [
             {
               value: { providerID: "auto", modelID: "free" },
-              title: autoProvider.models["free"]?.name ?? "Auto Model (無料)",
-              description: "無料モデルを自動切替（自律モード /auto とは別）",
-              category: "Auto Model",
+              title: autoProvider.models["free"]?.name ?? "Auto (無料)",
+              description: "無料モデルを自動切替（Zen 等・キー不要）",
+              category: t("tui.dialog.model.free_no_config_category"),
               disabled: false,
               footer: "Free" as "Free" | "API" | undefined,
               onSelect() {
                 onSelect("auto", "free")
               },
             },
+          ]
+        : []
+
+    const freeApiKeyOptions =
+      showFreeSection && showSections
+        ? [
+            ...(openRouterFreeProvider && "free" in openRouterFreeProvider.models && !inShortcuts("openrouter-free", "free")
+              ? [
+                  {
+                    value: { providerID: "openrouter-free", modelID: "free" },
+                    title: openRouterFreeProvider.models["free"]?.name ?? "OpenRouter (無料)",
+                    description: t("tui.dialog.model.openrouter_free_desc"),
+                    category: t("tui.dialog.model.free_api_key_category"),
+                    disabled: !openRouterProvider,
+                    footer: "Free" as "Free" | "API" | undefined,
+                    onSelect() {
+                      if (openRouterProvider) {
+                        onSelect("openrouter-free", "free")
+                        return
+                      }
+                      dialog.replace(() => <DialogAutoFreeSetup />)
+                    },
+                  },
+                ]
+              : []),
             {
               value: { providerID: "auto", modelID: "__setup_free__" },
               title: t("tui.dialog.model.auto_free_setup"),
               description: t("tui.dialog.model.auto_free_setup_desc"),
-              category: "Auto",
+              category: t("tui.dialog.model.free_api_key_category"),
               disabled: false,
               footer: undefined as "Free" | "API" | undefined,
               onSelect() {
@@ -135,34 +157,10 @@ export function DialogModel(props: { providerID?: string }) {
           ]
         : []
 
-    const openRouterFreePinned =
-      showAutoPin &&
-      openRouterFreeProvider &&
-      "free" in openRouterFreeProvider.models &&
-      (!showSections || !inShortcuts("openrouter-free", "free"))
-        ? [
-            {
-              value: { providerID: "openrouter-free", modelID: "free" },
-              title: openRouterFreeProvider.models["free"]?.name ?? "OpenRouter (無料・API KEY必要)",
-              description: t("tui.dialog.model.openrouter_free_desc"),
-              category: "OpenRouter",
-              disabled: !openRouterProvider,
-              footer: "Free" as "Free" | "API" | undefined,
-              onSelect() {
-                if (openRouterProvider) {
-                  onSelect("openrouter-free", "free")
-                  return
-                }
-                dialog.replace(() => <DialogAutoFreeSetup />)
-              },
-            },
-          ]
-        : []
+    const showPinned = connected() && !props.providerID
 
     const pinnedOptions = showPinned
       ? [
-          ...autoPinned,
-          ...openRouterFreePinned,
           // mimo-free model
           ...(mimoProvider && "mimo-auto" in mimoProvider.models && mimoProvider.models["mimo-auto"].status !== "deprecated" && (!showSections || !inShortcuts("mimo", "mimo-auto"))
             ? [
@@ -218,15 +216,20 @@ export function DialogModel(props: { providerID?: string }) {
               ]
             : []),
         ]
-      : [...autoPinned, ...openRouterFreePinned]
+      : []
+
+    function isFreeProviderModel(providerID: string, modelID: string, costInput?: number) {
+      if (providerID === "opencode" && costInput === 0) return true
+      if (providerID === "openrouter" && modelID.endsWith(":free")) return true
+      return false
+    }
 
     const providerOptions = pipe(
       sync.data.provider,
-      // Exclude pinned providers from regular list when those sections are shown
       filter(
         (provider) =>
-          !(showAutoPin && provider.id === "auto") &&
-          !(showAutoPin && provider.id === "openrouter-free") &&
+          !(showFreeSection && provider.id === "auto") &&
+          !(showFreeSection && provider.id === "openrouter-free") &&
           !(showPinned && (provider.id === "xiaomi" || provider.id === "mimo")),
       ),
       sortBy(
@@ -250,12 +253,11 @@ export function DialogModel(props: { providerID?: string }) {
             description: undefined as string | undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer:
-              provider.id === "opencode" && model === "big-pickle-api"
+            footer: isFreeProviderModel(provider.id, model, info.cost?.input)
+              ? "Free"
+              : provider.id === "opencode" && model === "big-pickle-api"
                 ? "API"
-                : info.cost?.input === 0 && provider.id === "opencode"
-                  ? "Free"
-                  : undefined,
+                : undefined,
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -266,7 +268,7 @@ export function DialogModel(props: { providerID?: string }) {
             return !inShortcuts(x.value.providerID, x.value.modelID)
           }),
           sortBy(
-            (x) => x.footer !== "Free",
+            (x) => !isFreeProviderModel(x.value.providerID, x.value.modelID),
             (x) => x.title,
           ),
         )
@@ -300,15 +302,18 @@ export function DialogModel(props: { providerID?: string }) {
         )
       : []
 
+    const freeOptions = [...freeNoConfigOptions, ...freeApiKeyOptions]
+
     if (needle) {
       return [
+        ...fuzzysort.go(needle, freeOptions, { keys: ["title", "category"] }).map((x) => x.obj),
         ...fuzzysort.go(needle, pinnedOptions, { keys: ["title", "category"] }).map((x) => x.obj),
         ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
 
-    return [...favoriteOptions, ...recentOptions, ...pinnedOptions, ...providerOptions, ...popularProviders]
+    return [...favoriteOptions, ...recentOptions, ...freeOptions, ...pinnedOptions, ...providerOptions, ...popularProviders]
   })
 
   const provider = createMemo(() =>

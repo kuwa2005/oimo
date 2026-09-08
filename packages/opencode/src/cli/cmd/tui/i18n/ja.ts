@@ -412,6 +412,8 @@ export const dict = {
   "tui.dialog.auto_mode.error": "オートモードの切替に失敗しました（{{status}}）",
   "tui.dialog.model.auto_free_setup": "無料プロバイダのキーを追加…",
   "tui.dialog.model.auto_free_setup_desc": "OpenRouter / NVIDIA / Groq のアカウント＋APIキー設定",
+  "tui.dialog.model.free_no_config_category": "無料 · 設定不要",
+  "tui.dialog.model.free_api_key_category": "無料 · APIキー必要",
   "tui.dialog.model.openrouter_free_desc": "OpenRouter の :free モデルを自動切替（OPENROUTER_API_KEY 必須）",
   "tui.model.mimo_auto.name": "MiMo Auto（MiMo-V2.5 7月26日 18:00 まで無料 · UTC+8）",
   "tui.model.mimo_auto.sunset_name": "MiMo Auto（MiMo-V2.5）",

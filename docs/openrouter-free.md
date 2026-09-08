@@ -43,7 +43,7 @@ bun script/sync-openrouter-free-catalog.ts
 
 ## TUI
 
-モデル選択のピンに **OpenRouter (無料・API KEY必要)** が表示されます。キー未設定時は無料プロバイダ設定ダイアログへ誘導します。
+モデル選択のピンに **OpenRouter (無料)** が表示されます。キー未設定時は無料プロバイダ設定ダイアログへ誘導します。
 
 ## Auto(無料) との関係
 

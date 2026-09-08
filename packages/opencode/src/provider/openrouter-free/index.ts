@@ -49,7 +49,7 @@ export function openRouterFreeVirtualModel(): Model {
   return {
     id: ModelID.make(OPENROUTER_FREE_MODEL_ID),
     providerID: ProviderID.make(OPENROUTER_FREE_PROVIDER_ID),
-    name: "OpenRouter (無料・API KEY必要)",
+    name: "OpenRouter (無料)",
     family: "openrouter",
     api: {
       id: OPENROUTER_FREE_MODEL_ID,
