@@ -1,4 +1,4 @@
-<h1 align="center">Open Mimo Code</h1>
+<h1 align="center">Oimo</h1>
 
 <p align="center">
   <img src="assets/readme/OpenMimoCode.png" alt="Open Mimo Code" width="700">
