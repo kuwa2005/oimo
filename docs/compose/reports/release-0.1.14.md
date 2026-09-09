@@ -14,7 +14,7 @@ v0.1.14 を GitHub Releases として公開した。旧 publish.yml (workflow_di
 - アセット: **12 アーカイブ** (darwin-arm64 / darwin-x64 / darwin-x64-baseline / linux-arm64 /
   linux-arm64-musl / linux-x64 / linux-x64-baseline / linux-x64-baseline-musl / linux-x64-musl /
   windows-arm64 / windows-x64 / windows-x64-baseline) + **SHA256SUMS**
-- URL: https://github.com/kuwa2005/OpenMimoCode/releases/tag/v0.1.14
+- URL: https://github.com/kuwa2005/oimo/releases/tag/v0.1.14
 
 ## 経過
 

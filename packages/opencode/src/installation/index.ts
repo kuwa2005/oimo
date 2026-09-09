@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -15,9 +15,9 @@ import { InstallationChannel, InstallationVersion } from "./version"
 
 const log = Log.create({ service: "installation" })
 
-const PACKAGE_NAME = "@mimo-ai/cli"
-
-const RELEASE_REPO = process.env.GH_REPO ?? "kuwa2005/OpenMimoCode"
+// This fork distributes via GitHub Releases only (curl/irm). Do not detect or
+// upgrade upstream `@mimo-ai/cli` — that package is unrelated to kuwa2005/oimo.
+const RELEASE_REPO = process.env.GH_REPO ?? "kuwa2005/oimo"
 
 export type Method = "curl" | "npm" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
@@ -77,7 +77,6 @@ export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedErr
 
 // TODO(oimo): uncomment when corresponding channels are supported
 // const GitHubRelease = Schema.Struct({ tag_name: Schema.String })
-const NpmPackage = Schema.Struct({ version: Schema.String })
 // const BrewFormula = Schema.Struct({ versions: Schema.Struct({ stable: Schema.String }) })
 // const BrewInfoV2 = Schema.Struct({
 //   formulae: Schema.Array(Schema.Struct({ versions: Schema.Struct({ stable: Schema.String }) })),
@@ -85,7 +84,7 @@ const NpmPackage = Schema.Struct({ version: Schema.String })
 // const ChocoPackage = Schema.Struct({
 //   d: Schema.Struct({ results: Schema.Array(Schema.Struct({ Version: Schema.String })) }),
 // })
-// const ScoopManifest = NpmPackage
+// const ScoopManifest = Schema.Struct({ version: Schema.String })
 
 export interface Interface {
   readonly info: () => Effect.Effect<Info>
@@ -208,55 +207,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
       const methodImpl = Effect.fn("Installation.method")(function* () {
         if (process.execPath.includes(path.join(".oimo", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
-        const exec = process.execPath.toLowerCase()
-
-        const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
-          { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
-          { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]) },
-          { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]) },
-          // TODO(oimo): uncomment when oimo is published to these channels
-          // { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
-          // { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
-          // { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
-        ]
-
-        checks.sort((a, b) => {
-          const aMatches = exec.includes(a.name)
-          const bMatches = exec.includes(b.name)
-          if (aMatches && !bMatches) return -1
-          if (!aMatches && bMatches) return 1
-          return 0
-        })
-
-        for (const check of checks) {
-          const output = yield* check.command()
-          if (output.includes(PACKAGE_NAME)) {
-            return check.name
-          }
-        }
-
+        // Fork: no npm/pnpm/bun package channel. Official installs are curl/irm only.
         return "unknown" as Method
       })
 
       const latestImpl = Effect.fn("Installation.latest")(function* (installMethod?: Method) {
         const detectedMethod = installMethod || (yield* methodImpl())
-
-        // TODO(oimo): uncomment when oimo is published to homebrew
-        // if (detectedMethod === "brew") {
-        //   const formula = yield* getBrewFormula()
-        //   if (formula.includes("/")) {
-        //     const infoJson = yield* text(["brew", "info", "--json=v2", formula])
-        //     const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
-        //     return info.formulae[0].versions.stable
-        //   }
-        //   const response = yield* httpOk.execute(
-        //     HttpClientRequest.get("https://formulae.brew.sh/api/formula/opencode.json").pipe(
-        //       HttpClientRequest.acceptJson,
-        //     ),
-        //   )
-        //   const data = yield* HttpClientResponse.schemaBodyJson(BrewFormula)(response)
-        //   return data.versions.stable
-        // }
 
         if (detectedMethod === "curl") {
           // Resolve the latest version from GitHub, matching the source the
@@ -268,108 +224,21 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           return yield* Effect.die(new Error(`failed to resolve latest version from ${url}`))
         }
 
-        if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
-          const r = (yield* text(["npm", "config", "get", "registry"])).trim()
-          const reg = r || "https://registry.npmjs.org"
-          const registry = reg.endsWith("/") ? reg.slice(0, -1) : reg
-          const response = yield* httpOk.execute(
-            HttpClientRequest.get(`${registry}/${encodeURIComponent(PACKAGE_NAME)}/${InstallationChannel}`).pipe(
-              HttpClientRequest.acceptJson,
-            ),
-          )
-          const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
-          return data.version
-        }
-
-        // TODO(oimo): uncomment when oimo is published to chocolatey
-        // if (detectedMethod === "choco") {
-        //   const response = yield* httpOk.execute(
-        //     HttpClientRequest.get(
-        //       "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
-        //     ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
-        //   )
-        //   const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response)
-        //   return data.d.results[0].Version
-        // }
-
-        // TODO(oimo): uncomment when oimo is published to scoop
-        // if (detectedMethod === "scoop") {
-        //   const response = yield* httpOk.execute(
-        //     HttpClientRequest.get(
-        //       "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json",
-        //     ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json" })),
-        //   )
-        //   const data = yield* HttpClientResponse.schemaBodyJson(ScoopManifest)(response)
-        //   return data.version
-        // }
-
-        // TODO(oimo): uncomment when oimo has github releases
-        // const response = yield* httpOk.execute(
-        //   HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
-        //     HttpClientRequest.acceptJson,
-        //   ),
-        // )
-        // const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
-        // return data.tag_name.replace(/^v/, "")
-
         log.warn("unsupported update channel, skipping", { method: detectedMethod })
         return yield* Effect.die(new Error(`unsupported update channel: ${detectedMethod}`))
       }, Effect.orDie)
 
       const upgradeImpl = Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
-        let result: { code: ChildProcessSpawner.ExitCode; stdout: string; stderr: string } | undefined
-        switch (m) {
-          case "curl":
-            result = yield* upgradeCurl(target)
-            break
-          case "npm":
-            result = yield* run(["npm", "install", "-g", `${PACKAGE_NAME}@${target}`])
-            break
-          case "pnpm":
-            result = yield* run(["pnpm", "install", "-g", `${PACKAGE_NAME}@${target}`])
-            break
-          case "bun":
-            result = yield* run(["bun", "install", "-g", `${PACKAGE_NAME}@${target}`])
-            break
-          // TODO(oimo): uncomment when oimo is published to homebrew
-          // case "brew": {
-          //   const formula = yield* getBrewFormula()
-          //   const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
-          //   if (formula.includes("/")) {
-          //     const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
-          //     if (tap.code !== 0) {
-          //       result = tap
-          //       break
-          //     }
-          //     const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
-          //     const dir = repo.trim()
-          //     if (dir) {
-          //       const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
-          //       if (pull.code !== 0) {
-          //         result = pull
-          //         break
-          //       }
-          //     }
-          //   }
-          //   result = yield* run(["brew", "upgrade", formula], { env })
-          //   break
-          // }
-          // TODO(oimo): uncomment when oimo is published to chocolatey
-          // case "choco":
-          //   result = yield* run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"])
-          //   break
-          // TODO(oimo): uncomment when oimo is published to scoop
-          // case "scoop":
-          //   result = yield* run(["scoop", "install", `opencode@${target}`])
-          //   break
-          default:
-            return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })
+        if (m !== "curl") {
+          return yield* new UpgradeFailedError({
+            stderr:
+              `Unsupported install method: ${m}. This fork distributes via GitHub Releases only. ` +
+              `Reinstall with: curl -fsSL https://raw.githubusercontent.com/${RELEASE_REPO}/main/install | bash`,
+          })
         }
-        if (!result || result.code !== 0) {
-          // TODO(oimo): restore choco-specific error when choco channel is supported
-          // const stderr = m === "choco" ? "not running from an elevated command shell" : result?.stderr || ""
-          const stderr = result?.stderr || ""
-          return yield* new UpgradeFailedError({ stderr })
+        const result = yield* upgradeCurl(target)
+        if (result.code !== 0) {
+          return yield* new UpgradeFailedError({ stderr: result.stderr || "" })
         }
         log.info("upgraded", {
           method: m,

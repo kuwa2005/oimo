@@ -64,7 +64,7 @@ Spec: [docs/compose/specs/releases-installer.md](../specs/releases-installer.md)
 1. repo シークレット追加 (Settings → Secrets and variables → Actions):
    - `NPM_TOKEN` (npmjs.com access token、publish 権限) — 未設定時は npm がスキップされる
    - `MIMO_FDS_AK` / `MIMO_FDS_SK` (および任意で `MIMO_FDS_ENDPOINT` / `MIMO_FDS_BUCKET` / `MIMO_FDS_PREFIX`) — 未設定時は FDS ミラーがスキップされる
-2. リリースカット: `GH_REPO=kuwa2005/OpenMimoCode ./script/release patch` (または major / minor)。バージョン固定は publish.yml の `version` input で上書き可能。
+2. リリースカット: `GH_REPO=kuwa2005/oimo ./script/release patch` (または major / minor)。バージョン固定は publish.yml の `version` input で上書き可能。
 3. ワークフローが バージョン bump → ビルド (12 ターゲット) → アセット+SHA256SUMS アップロード → npm publish → リリース finalize を実行。
 
 ## 知見

@@ -57,7 +57,7 @@ export function renderDocsIndex(docs: DocEntry[], markedSrc: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenMimoCode Docs</title>
+<title>oimo Docs</title>
 <style>
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #57606a; --border: #d0d7de;
@@ -131,7 +131,7 @@ main { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 960px; }
 </head>
 <body>
 <header>
-  <h1>OpenMimoCode Docs</h1>
+  <h1>oimo Docs</h1>
   <span id="doc-count"></span>
   <button id="theme-toggle" type="button" title="テーマ切替">☾</button>
 </header>

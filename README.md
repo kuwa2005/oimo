@@ -1,7 +1,7 @@
 <h1 align="center">Oimo</h1>
 
 <p align="center">
-  <img src="assets/readme/OpenMimoCode.png" alt="Open Mimo Code" width="700">
+  <img src="assets/readme/oimo.png" alt="Open Mimo Code" width="700">
 </p>
 
 <p align="center"><strong>Open Mimo Code: Where Models and Agents Co-Evolve</strong></p>
@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kuwa2005/OpenMimoCode">GitHub</a> | <a href="https://github.com/kuwa2005/OpenMimoCode/releases">リリース</a>
+  <a href="https://github.com/kuwa2005/oimo">GitHub</a> | <a href="https://github.com/kuwa2005/oimo/releases">リリース</a>
 </p>
 
 ---
@@ -29,20 +29,16 @@ OpenCode Zen が無料のデフォルトチャネルとして組み込まれて�
 **macOS / Linux**（ワンラインインストール）:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash
 ```
 
 **Windows PowerShell**（ワンラインインストール）:
 
 ```powershell
-powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex"
+powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex"
 ```
 
-**npm**（全プラットフォーム）:
-
-```bash
-npm install -g @mimo-ai/cli
-```
+配布は GitHub Releases のバイナリのみです（上流の `@mimo-ai/*` npm パッケージとは無関係）。
 
 **実行**:
 

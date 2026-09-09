@@ -26,7 +26,7 @@ cd ~/work/customer-platform
 2. Copy the sample and edit URLs:
 
 ```bash
-cp /path/to/OpenMimoCode/docs/multi-repo/samples/url-list/repos.txt .oimo/repos.txt
+cp /path/to/oimo/docs/multi-repo/samples/url-list/repos.txt .oimo/repos.txt
 ```
 
 3. Clone siblings (folder name = last URL segment, or `id=`):
@@ -34,7 +34,7 @@ cp /path/to/OpenMimoCode/docs/multi-repo/samples/url-list/repos.txt .oimo/repos.
 ```bash
 git clone https://github.com/example-org/frontend
 git clone https://github.com/example-org/backend
-bash /path/to/OpenMimoCode/docs/multi-repo/samples/url-list/clone-from-repos-txt.sh
+bash /path/to/oimo/docs/multi-repo/samples/url-list/clone-from-repos-txt.sh
 ```
 
 4. Launch from the primary app repo: `cd backend && oimo`

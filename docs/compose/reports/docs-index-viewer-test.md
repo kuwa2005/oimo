@@ -66,7 +66,7 @@ specs / spec / reports / plans / architecture / harness / RELEASING.md) を一�
 # 文書を追加・変更したら再生成 (ローカル)
 bun script/build-docs-index.ts
 
-# GitHub Pages (https://kuwa2005.github.io/OpenMimoCode/docs/) は
+# GitHub Pages (https://kuwa2005.github.io/oimo/docs/) は
 # pages.yml がデプロイ前に自動再生成するため、push だけで最新化される
 ```
 

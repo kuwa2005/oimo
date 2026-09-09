@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${GH_REPO:-kuwa2005/OpenMimoCode}"
+REPO="${GH_REPO:-kuwa2005/oimo}"
 BUMP_TYPE="patch"
 VERSION=""
 WATCH=1
@@ -49,17 +49,14 @@ fi
 
 echo "--- Secrets ($REPO) ---"
 SECRETS=$(gh secret list --repo "$REPO" --json name -q '.[].name' 2>/dev/null || true)
-for s in NPM_TOKEN MIMO_FDS_AK MIMO_FDS_SK; do
+for s in MIMO_FDS_AK MIMO_FDS_SK; do
   if printf '%s\n' "$SECRETS" | grep -qx "$s"; then
     echo "  [ok]   $s"
   else
-    case "$s" in
-      NPM_TOKEN) note="npm publish will be skipped (GitHub Release still publishes)" ;;
-      *) note="FDS mirror upload will be skipped" ;;
-    esac
-    echo "  [skip] $s is not set -> $note"
+    echo "  [skip] $s is not set -> FDS mirror upload will be skipped"
   fi
 done
+echo "  (npm publish disabled for this fork; GitHub Releases only)"
 
 # --- Bump & commit ---
 echo "--- Bump ---"

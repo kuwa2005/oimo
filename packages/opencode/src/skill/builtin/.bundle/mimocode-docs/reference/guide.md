@@ -2,7 +2,7 @@
 
 How-to for the features users most often ask about. For config keys see @config.md; for permissions see @permissions.md; for commands see @commands.md.
 
-**Why oimo vs Cursor, Claude Code, Codex, or vanilla OpenCode?** See the repo doc [docs/oimo-differentiators.ja.md](https://github.com/kuwa2005/OpenMimoCode/blob/main/docs/oimo-differentiators.ja.md) (Japanese).
+**Why oimo vs Cursor, Claude Code, Codex, or vanilla OpenCode?** See the repo doc [docs/oimo-differentiators.ja.md](https://github.com/kuwa2005/oimo/blob/main/docs/oimo-differentiators.ja.md) (Japanese).
 
 ## Getting started & auth
 

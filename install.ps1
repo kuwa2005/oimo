@@ -10,11 +10,11 @@
 .PARAMETER NoModifyPath
     Don't modify the user PATH environment variable.
 .LINK
-    https://github.com/kuwa2005/OpenMimoCode
+    https://github.com/kuwa2005/oimo
 .EXAMPLE
-    irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex
 .EXAMPLE
-    $env:VERSION = "0.1.0"; irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex
+    $env:VERSION = "0.1.0"; irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex
 #>
 param(
     [String] $Version,
@@ -85,7 +85,7 @@ if ($NeedsBaseline) { $Target = "$Target-baseline" }
 
 # --- Resolve version ---
 
-$Repo = if ($env:GH_REPO) { $env:GH_REPO } else { "kuwa2005/OpenMimoCode" }
+$Repo = if ($env:GH_REPO) { $env:GH_REPO } else { "kuwa2005/oimo" }
 $BaseUrl = if ($env:OIMO_BASE_URL) { $env:OIMO_BASE_URL } else { "https://github.com/$Repo" }
 
 if (-not $Version) {
@@ -251,5 +251,5 @@ Write-Host "  cd <project>"
 Write-Host "  oimo"
 Write-Host ""
 Write-Host "For more information visit " -NoNewline -ForegroundColor DarkGray
-Write-Host "https://github.com/kuwa2005/OpenMimoCode"
+Write-Host "https://github.com/kuwa2005/oimo"
 Write-Host ""

@@ -30,7 +30,7 @@ cd ~/work/customer-platform
 2. サンプルをコピーして URL を書き換える:
 
 ```bash
-cp /path/to/OpenMimoCode/docs/multi-repo/samples/url-list/repos.txt .oimo/repos.txt
+cp /path/to/oimo/docs/multi-repo/samples/url-list/repos.txt .oimo/repos.txt
 # .oimo/repos.txt を編集 — https://github.com/... を1行1リポ
 ```
 
@@ -40,7 +40,7 @@ cp /path/to/OpenMimoCode/docs/multi-repo/samples/url-list/repos.txt .oimo/repos.
 git clone https://github.com/example-org/frontend
 git clone https://github.com/example-org/backend
 # またはヘルパー
-bash /path/to/OpenMimoCode/docs/multi-repo/samples/url-list/clone-from-repos-txt.sh
+bash /path/to/oimo/docs/multi-repo/samples/url-list/clone-from-repos-txt.sh
 ```
 
 4. 主対象リポで oimo を起動:
@@ -165,4 +165,4 @@ FDE（`oimo --fde`）と組み合わせると、API + UI + schema にまたが�
 ## 関連リンク
 
 - オリジナル機能一覧（§12 マルチリポ）: [`オリジナル実装.md`](../../オリジナル実装.md)
-- リリース: [v1.2.0](https://github.com/kuwa2005/OpenMimoCode/releases/tag/v1.2.0)
+- リリース: [v1.2.0](https://github.com/kuwa2005/oimo/releases/tag/v1.2.0)

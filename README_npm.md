@@ -1,79 +1,17 @@
-<h1 align="center">Open Mimo Code</h1>
+# npm 配布について（この fork では未使用）
 
-<p align="center"><strong>Open Mimo Code: Where Models and Agents Co-Evolve</strong></p>
+`kuwa2005/oimo` は **GitHub Releases のバイナリのみ**を公式配布とします。
 
-<p align="center">
-  <a href="https://github.com/kuwa2005/OpenMimoCode">GitHub</a> | <a href="https://github.com/kuwa2005/OpenMimoCode/releases">Releases</a>
-</p>
+上流の `@mimo-ai/cli` / `@mimo-ai/oimo-*` とは無関係です。`npm install -g @mimo-ai/cli` は Xiaomi 上流のパッケージを入れます。
 
----
-
-Open Mimo Code is a terminal-native AI coding assistant. It can read and write code, run commands, manage Git, and use a persistent memory system to keep a deep understanding of your project across sessions while continuously improving itself.
-
-OpenCode Zen is built in as a free default channel, so you can start with zero configuration. Open Mimo Code also supports connecting to any mainstream LLM provider API.
-
----
-
-## Quick Start
-
-**macOS / Linux** (one-line install):
+インストール:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash
 ```
-
-**Windows PowerShell** (one-line install):
 
 ```powershell
-powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex"
+powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex"
 ```
 
-**npm** (all platforms):
-
-```bash
-npm install -g @mimo-ai/cli --registry https://registry.npmjs.org
-```
-
-Note: mirror registries (e.g. cnpm/taobao) may have delayed platform package sync.
-
-**Run**:
-
-```bash
-oimo
-```
-
-The first launch guides you through configuration automatically. Supported options:
-- **OpenCode Zen (Big Pickle)** — free default channel, zero configuration
-- **Xiaomi MiMo Platform** — OAuth login
-- **Codex (ChatGPT Pro/Plus)** — OpenAI OAuth login
-- **Import from Claude Code** — migrate existing authentication in one step
-- **Provider list** — connect catalog providers by API key, or OAuth where supported (e.g. xAI/Grok)
-- **Custom Provider** — add any OpenAI-compatible API in the TUI
-
----
-
-## Core Features
-
-- **Multiple Agents** — build (default), plan (read-only analysis), compose (specs-driven orchestration); press `Tab` to switch
-- **Persistent Memory** — cross-session project knowledge, checkpoints, and task progress powered by SQLite FTS5
-- **Intelligent Context Management** — automatic checkpoints, context reconstruction, and budgeted injection to stay within model limits
-- **Task Tracking** — tree-shaped task system integrated with the checkpoint system
-- **Subagent System** — parallel subagents with lifecycle tracking, cancellation, and background execution
-- **Goal / Stop Condition** — judge model prevents premature stops during autonomous work
-- **Compose Mode** — structured workflow for specs-driven development; recommended via the `/compose-next` skill on the build agent
-- **Builtin Skills** — 20+ reusable instruction sets (PDF/Office generation, research, design, and more), invoked via `/skill-name` or auto-matched by relevance
-- **Workflows** — deterministic multi-agent orchestration scripts, including built-in compose, deep-research, fact-check, and research-experiment pipelines
-- **Voice Input** — real-time streaming voice input powered by TenVAD and MiMo ASR
-- **Dream & Distill** — extract knowledge into memory (`/dream`) and discover reusable workflows (`/distill`)
-
-For detailed documentation, configuration options, and troubleshooting, see the [GitHub repository](https://github.com/XiaomiMiMo/MiMo-Code).
-
----
-
-## License
-
-Source code is licensed under the [MIT License](https://github.com/XiaomiMiMo/MiMo-Code/blob/main/LICENSE).
-
-Use of Open Mimo Code is also subject to the [Use Restrictions](https://github.com/XiaomiMiMo/MiMo-Code/blob/main/USE_RESTRICTIONS.md).
-Use of Xiaomi MiMo-hosted services is subject to the [MiMo Terms of Service](https://platform.xiaomimimo.com/docs/terms/user-agreement).
-Use of the MiMo name, logo, and trademarks is subject to the MiMo Trademark Policy.
+リリース手順は [docs/RELEASING.md](./docs/RELEASING.md) を参照してください。

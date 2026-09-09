@@ -1,6 +1,6 @@
 # リリース手順 (RELEASING)
 
-このドキュメントは OpenMimoCode のリリースを「迷わず」進めるためのランブックです。
+このドキュメントは oimo のリリースを「迷わず」進めるためのランブックです。
 リリースカットは原則 **`./script/release` の 1 コマンド** で完結します (bump → タグ push → 自動リリース)。
 詳細な仕組みを知りたい場合やトラブル時は、このドキュメントの該当セクションを参照してください。
 
@@ -14,12 +14,13 @@
    ↓ (on: push.tags.v*)
 build-cli (12 ターゲットを build matrix で並列ビルド → アーカイブのみ生成)
    ↓ (needs)
-assemble (アーカイブ集約 → SHA256SUMS 生成 → リリースノート → softprops でリリース作成・公開 → npm)
+assemble (アーカイブ集約 → SHA256SUMS 生成 → リリースノート → softprops でリリース作成・公開)
 ```
 
 - **トリガー**: `v*` タグの push のみ。`workflow_dispatch` (手動発火) は廃止されました。
 - **公開まで自動**: タグ push 後はビルド・アセット・チェックサム・リリース公開まで CI が自動実行します。
   人間が操作するのはタグを作って push する (次の手順) だけです。
+- **配布**: GitHub Releases のみ（上流 `@mimo-ai/*` npm とは無関係）。
 - バージョンの真実は**タグ名**です (`v0.1.15` → `MIMOCODE_VERSION=0.1.15`)。ワークフロー内での
   bump コミットは行いません。
 
@@ -32,9 +33,10 @@ assemble (アーカイブ集約 → SHA256SUMS 生成 → リリースノート 
 
    | シークレット | 必須 | 省略時の挙動 |
    |---|---|---|
-   | `NPM_TOKEN` | 任意 | npm 公開をスキップし、warning を出力 (GitHub リリース自体は完了) |
    | `MIMO_FDS_AK` / `MIMO_FDS_SK` | 任意 | FDS (中国向け CDN ミラー) へのアップロードをスキップ |
    | `MIMO_FDS_ENDPOINT` / `MIMO_FDS_BUCKET` / `MIMO_FDS_PREFIX` | 任意 | FDS の接続先 (既定値がある場合は不要) |
+
+   この fork は **GitHub Releases のみ**で配布します。上流 `@mimo-ai/*` への npm 公開は行いません（`NPM_TOKEN` は不要）。
 
    `gh secret list` で確認できます。`script/release` がプリフライトで設定状況を表示します。
 
@@ -111,8 +113,7 @@ assemble (アーカイブ集約 → SHA256SUMS 生成 → リリースノート 
 4. **softprops/action-gh-release** でリリースを作成・公開 (`draft: false`)。
    12 アーカイブ + `SHA256SUMS` を添付します。アセットが欠けている場合は失敗します
    (`fail_on_unmatched_files: true`)。
-5. `NPM_TOKEN` があれば `script/publish.ts` で npm 公開 (per-platform パッケージ群)。
-   なければ warning のみ (リリースは完了)。
+5. npm 公開は行いません（この fork は GitHub Releases のみ）。
 
 ## アセットとチェックサム・インストーラー検証
 
@@ -124,12 +125,10 @@ assemble (アーカイブ集約 → SHA256SUMS 生成 → リリースノート 
 - `OIMO_BASE_URL` 環境変数でダウンロード・チェックサム取得のベース URL を差し替えられます
   (既定は `https://github.com/<repo>`。FDS ミラー運用やテストで使用)。
 
-## npm 配布
+## 配布経路
 
-npm は **per-platform オプショナル依存パッケージ** 方式です
-(`@mimo-ai/oimo-<platform>-<arch>`、`postinstall.mjs` が解決)。`script/publish.ts` が
-各ターゲットのパッケージを作成・公開します。GitHub リリースのアーカイブは curl/irm インストーラー用であり、
-npm とは独立です。
+公式インストールは **curl / irm インストーラー → GitHub Releases アセット** のみです。
+上流の `@mimo-ai/cli` npm パッケージとは無関係です。
 
 ## FDS ミラー (任意)
 
@@ -141,12 +140,10 @@ npm とは独立です。
 | 症状 | 原因と対処 |
 |---|---|
 | `Error: not authenticated with gh` | `gh auth login` を実行 (スコープ: repo, workflow)。 |
-| `[warn] NPM_TOKEN is NOT set` | npm 公開がスキップされます。必要ならリポジトリシークレットに追加して再実行。 |
 | `checksum mismatch` でインストール失敗 | ダウンロードが壊れているか、リリースの SHA256SUMS と実アセットが不一致。リリースページで SHA256SUMS を再確認し、壊れたリリースは `gh release delete` + バージョンを上げて再実行。 |
 | リリースノートが「No notable changes」になる | 直前タグからの差分が無いか、タグがローカルに無い。`git fetch --tags` してから再実行。 |
 | タグ push してもワークフローが走らない | release.yml がデフォルトブランチに存在し、**登録済み**であること (`gh api repos/<owner>/<repo>/actions/workflows` で確認)。このリポジトリでは登録拒否がサイレントに起きた実績があるため、ワークフロー変更時は必ず確認する。 |
 | build-cli の一部ジョブだけ失敗 | matrix は `fail-fast: false` なので他ターゲットは継続。失敗ジョブのログ (`gh run view <id> --log-failed`) を確認し、修正後に**バージョンを上げて**再実行 (同じタグを再 push するには先にタグとリリースを削除する必要があります)。 |
-| npm 公開済みなのにインストーラーが古い | インストーラーは GitHub リリースのアセットを参照します。アセットが揃っているかリリースページで確認。 |
 | `Unknown argument` が出る | `script/release --help` で使い方を確認。 |
 
 ## 開発・デバッグ用コマンド

@@ -70,10 +70,10 @@ function findBinary() {
 
 function printMigrationNotice() {
   const install = os.platform() === "win32"
-    ? "irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex"
-    : "curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash"
+    ? "irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex"
+    : "curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash"
   console.log()
-  console.log("  Recommended: install Open Mimo Code natively for a better install and upgrade experience:")
+  console.log("  This package path is not used by kuwa2005/oimo. Install from GitHub Releases:")
   console.log(`    ${install}`)
   console.log()
 }

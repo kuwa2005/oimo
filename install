@@ -23,8 +23,8 @@ Environment:
     OIMO_BASE_URL            Override the download base URL (default: https://github.com/<repo>)
 
 Examples:
-    curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash
-    curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash -s -- --version 0.1.0
+    curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash
+    curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash -s -- --version 0.1.0
     ./install --binary /path/to/oimo
 EOF
 }
@@ -186,7 +186,7 @@ else
     # Download from GitHub Releases. Layout:
     #   https://github.com/$repo/releases/latest             -> redirects to the latest release tag
     #   https://github.com/$repo/releases/download/v<version>/<filename>
-    repo="${GH_REPO:-kuwa2005/OpenMimoCode}"
+    repo="${GH_REPO:-kuwa2005/oimo}"
     base_url="${OIMO_BASE_URL:-https://github.com/$repo}"
     specific_version=""
 
@@ -536,6 +536,6 @@ else
     echo -e "oimo          ${MUTED}# Run command${NC}"
 fi
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://github.com/kuwa2005/OpenMimoCode"
+echo -e "${MUTED}For more information visit ${NC}https://github.com/kuwa2005/oimo"
 echo -e ""
 echo -e ""

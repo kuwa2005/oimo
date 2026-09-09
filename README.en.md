@@ -1,7 +1,7 @@
 <h1 align="center">Open Mimo Code</h1>
 
 <p align="center">
-  <img src="assets/readme/OpenMimoCode.png" alt="Open Mimo Code" width="700">
+  <img src="assets/readme/oimo.png" alt="Open Mimo Code" width="700">
 </p>
 
 <p align="center"><strong>Open Mimo Code: Where Models and Agents Co-Evolve</strong></p>
@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kuwa2005/OpenMimoCode">GitHub</a> | <a href="https://github.com/kuwa2005/OpenMimoCode/releases">Releases</a>
+  <a href="https://github.com/kuwa2005/oimo">GitHub</a> | <a href="https://github.com/kuwa2005/oimo/releases">Releases</a>
 </p>
 
 ---
@@ -29,20 +29,16 @@ OpenCode Zen is built in as a free default channel, so you can start with zero c
 **macOS / Linux** (one-line install):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash
 ```
 
 **Windows PowerShell** (one-line install):
 
 ```powershell
-powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex"
+powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex"
 ```
 
-**npm** (all platforms):
-
-```bash
-npm install -g @mimo-ai/cli
-```
+Distribution is GitHub Releases binaries only (unrelated to upstream `@mimo-ai/*` npm packages).
 
 **Run**:
 

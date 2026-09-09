@@ -45,7 +45,7 @@
 - **R1 コミット**: docs ビューア作業を 1 コミットで作成し、origin/main へプッシュ (husky pre-push の
   ため bun を PATH に含めて実行)。
 - **R2 リリース**: `script/release --version 0.1.14` で preflight → dispatch → watch まで自動実行。
-  GH_REPO 既定 `kuwa2005/OpenMimoCode`。
+  GH_REPO 既定 `kuwa2005/oimo`。
 - **R3 検証**: 完了後、以下を gh で確認。
   - workflow run が成功 (version → build-cli matrix 12 → publish)。
   - release v0.1.14 が存在し、12 アセット + SHA256SUMS を含み draft でない。

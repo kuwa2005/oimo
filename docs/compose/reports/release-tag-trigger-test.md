@@ -42,7 +42,7 @@ T6–T7b (RELEASING.md・AGENTS.md) / **T8** (nextVersion 純関数ユニット)
 | ID | 検証 | 結果 |
 |---|---|---|
 | V5a | actionlint `.github/workflows/release.yml` | **exit 0** (クリーン) |
-| V5b | push 後の `gh api repos/kuwa2005/OpenMimoCode/actions/workflows` で **release.yml の登録を確認** | コミット・push 後に実施 (本レポート末尾に追記) |
+| V5b | push 後の `gh api repos/kuwa2005/oimo/actions/workflows` で **release.yml の登録を確認** | コミット・push 後に実施 (本レポート末尾に追記) |
 | V6 | 実タグ push でのトリガー実証 | **実施しない** — 公開リリースが即座に作られるため。登録確認 + actionlint + 静的テスト (T3–T3i) で担保 |
 
 ## 既知の制約

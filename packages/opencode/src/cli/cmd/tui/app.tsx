@@ -1185,7 +1185,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         aliases: ["docs"],
       },
       onSelect: () => {
-        open("https://github.com/kuwa2005/OpenMimoCode").catch(() => {})
+        open("https://github.com/kuwa2005/oimo").catch(() => {})
         dialog.clear()
       },
       category: "system",

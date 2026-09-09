@@ -1167,7 +1167,7 @@ oimo completion fish &gt; ~/.config/fish/completions/oimo.fish</pre>
           <tr><td class="flag">MIMOCODE_DISABLE_OFFICIAL_SKILLS</td><td><code>true</code> でオフィス/メディア系スキル（docx / pdf / pptx / xlsx / html-to-video）のみ無効化</td></tr>
           <tr><td class="flag">MIMOCODE_DISABLE_COMPOSE_SKILLS</td><td><code>true</code> で compose エージェント内部のスキルを無効化</td></tr>
           <tr><td class="flag">MIMOCODE_DISABLE_SLASH_SKILLS</td><td><code>true</code> でスキルを TUI の <code>/</code> オートコンプリートから非表示（無効化はしない）</td></tr>
-          <tr><td class="flag">GH_REPO</td><td>アップグレード取得元リポジトリ <span class="def">（既定: kuwa2005/OpenMimoCode）</span></td></tr>
+          <tr><td class="flag">GH_REPO</td><td>アップグレード取得元リポジトリ <span class="def">（既定: kuwa2005/oimo）</span></td></tr>
           <tr><td class="flag">MIMOCODE_INSTALL_SCRIPT_URL</td><td>インストーラースクリプトの URL を上書き</td></tr>
           <tr><td class="flag">MIMOCODE_UNINSTALL_DIR</td><td>アンインストール対象ディレクトリ <span class="def">（既定: ~/.oimo/bin）</span></td></tr>
         </tbody>
@@ -1194,9 +1194,8 @@ oimo completion fish &gt; ~/.config/fish/completions/oimo.fish</pre>
         つまり「標準インストーラーでインストールされるスキル」＝ この同梱スキル一式ということになります。
       </p>
       <div class="term lg">
-<span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash   <span class="c"># macOS / Linux</span>
-<span class="p">$</span> irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex              <span class="c"># Windows PowerShell</span>
-<span class="p">$</span> npm install -g @mimo-ai/cli                                        <span class="c"># npm 版（同梱バイナリをリンク）</span>
+<span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash   <span class="c"># macOS / Linux</span>
+<span class="p">$</span> irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex              <span class="c"># Windows PowerShell</span>
 <span class="p">$</span> oimo debug skill                                               <span class="c"># 読み込まれている全スキルを確認</span>
       </div>
 

@@ -50,55 +50,10 @@ function testLayer(
 
 describe("installation", () => {
   describe("method", () => {
-    test("detects npm when @mimo-ai/cli is in npm list output", async () => {
+    test("returns unknown when not installed under curl paths", async () => {
       const layer = testLayer(
         () => jsonResponse({}),
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("-g")) return "@mimo-ai/cli@1.0.0"
-          return ""
-        },
-      )
-
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.method()).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("npm")
-    })
-
-    test("detects pnpm when @mimo-ai/cli is in pnpm list output", async () => {
-      const layer = testLayer(
-        () => jsonResponse({}),
-        (cmd, args) => {
-          if (cmd === "pnpm" && args.includes("-g")) return "@mimo-ai/cli@1.0.0"
-          return ""
-        },
-      )
-
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.method()).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("pnpm")
-    })
-
-    test("detects bun when @mimo-ai/cli is in bun pm ls output", async () => {
-      const layer = testLayer(
-        () => jsonResponse({}),
-        (cmd, args) => {
-          if (cmd === "bun" && args.includes("-g")) return "@mimo-ai/cli@1.0.0"
-          return ""
-        },
-      )
-
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.method()).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("bun")
-    })
-
-    test("returns unknown when no package manager has @mimo-ai/cli", async () => {
-      const layer = testLayer(
-        () => jsonResponse({}),
-        () => "",
+        () => "@mimo-ai/cli@1.0.0",
       )
 
       const result = await Effect.runPromise(
@@ -109,60 +64,12 @@ describe("installation", () => {
   })
 
   describe("latest", () => {
-    test("reads version from npm registry for npm method", async () => {
-      const layer = testLayer(
-        (req) => {
-          expect(req.url).toContain(encodeURIComponent("@mimo-ai/cli"))
-          return jsonResponse({ version: "1.5.0" })
-        },
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("registry")) return "https://registry.npmjs.org"
-          return ""
-        },
-      )
-
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("npm")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("1.5.0")
-    })
-
-    test("reads version from npm registry for pnpm method", async () => {
-      const layer = testLayer(
-        () => jsonResponse({ version: "1.6.0" }),
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("registry")) return "https://registry.npmjs.org"
-          return ""
-        },
-      )
-
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("pnpm")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("1.6.0")
-    })
-
-    test("reads version from npm registry for bun method", async () => {
-      const layer = testLayer(
-        () => jsonResponse({ version: "1.7.0" }),
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("registry")) return "https://registry.npmjs.org"
-          return ""
-        },
-      )
-
-      const result = await Effect.runPromise(
-        Installation.Service.use((svc) => svc.latest("bun")).pipe(Effect.provide(layer)),
-      )
-      expect(result).toBe("1.7.0")
-    })
-
     test("resolves version from GitHub latest release for curl method", async () => {
       const layer = testLayer(
         () => jsonResponse({}),
         (cmd, args) => {
-          if (cmd === "curl" && args.includes("https://github.com/kuwa2005/OpenMimoCode/releases/latest"))
-            return "https://github.com/kuwa2005/OpenMimoCode/releases/tag/v0.1.1\n"
+          if (cmd === "curl" && args.includes("https://github.com/kuwa2005/oimo/releases/latest"))
+            return "https://github.com/kuwa2005/oimo/releases/tag/v0.1.1\n"
           return ""
         },
       )
@@ -173,9 +80,9 @@ describe("installation", () => {
       expect(result).toBe("0.1.1")
     })
 
-    test("dies for unsupported channels (brew/choco/scoop/unknown)", async () => {
+    test("dies for unsupported channels (npm/pnpm/bun/brew/choco/scoop/unknown)", async () => {
       const layer = testLayer(() => jsonResponse({}))
-      const unsupported: Installation.Method[] = ["brew", "choco", "scoop", "unknown"]
+      const unsupported: Installation.Method[] = ["npm", "pnpm", "bun", "brew", "choco", "scoop", "unknown"]
 
       for (const method of unsupported) {
         const result = Effect.runPromise(
@@ -187,60 +94,14 @@ describe("installation", () => {
   })
 
   describe("upgrade", () => {
-    test("runs npm install with correct package", async () => {
-      let capturedCmd = ""
-      let capturedArgs: readonly string[] = []
-      const layer = testLayer(
-        () => jsonResponse({}),
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("install")) {
-            capturedCmd = cmd
-            capturedArgs = args
-          }
-          return ""
-        },
-      )
+    test("rejects npm with fork reinstall guidance", async () => {
+      const layer = testLayer(() => jsonResponse({}))
 
-      await Effect.runPromise(
-        Installation.Service.use((svc) => svc.upgrade("npm", "2.0.0")).pipe(Effect.provide(layer)),
+      const err = await Effect.runPromise(
+        Installation.Service.use((svc) => svc.upgrade("npm", "2.0.0")).pipe(Effect.provide(layer), Effect.flip),
       )
-      expect(capturedCmd).toBe("npm")
-      expect(capturedArgs).toContain("-g")
-      expect(capturedArgs).toContain("@mimo-ai/cli@2.0.0")
-    })
-
-    test("runs pnpm install with correct package", async () => {
-      let capturedArgs: readonly string[] = []
-      const layer = testLayer(
-        () => jsonResponse({}),
-        (cmd, args) => {
-          if (cmd === "pnpm" && args.includes("install")) capturedArgs = args
-          return ""
-        },
-      )
-
-      await Effect.runPromise(
-        Installation.Service.use((svc) => svc.upgrade("pnpm", "2.0.0")).pipe(Effect.provide(layer)),
-      )
-      expect(capturedArgs).toContain("-g")
-      expect(capturedArgs).toContain("@mimo-ai/cli@2.0.0")
-    })
-
-    test("runs bun install with correct package", async () => {
-      let capturedArgs: readonly string[] = []
-      const layer = testLayer(
-        () => jsonResponse({}),
-        (cmd, args) => {
-          if (cmd === "bun" && args.includes("install")) capturedArgs = args
-          return ""
-        },
-      )
-
-      await Effect.runPromise(
-        Installation.Service.use((svc) => svc.upgrade("bun", "2.0.0")).pipe(Effect.provide(layer)),
-      )
-      expect(capturedArgs).toContain("-g")
-      expect(capturedArgs).toContain("@mimo-ai/cli@2.0.0")
+      expect(err._tag).toBe("UpgradeFailedError")
+      expect(err.stderr).toMatch(/GitHub Releases only/)
     })
 
     test("fails for unknown method", async () => {

@@ -97,7 +97,7 @@ Author: compose agent (SE mode)
 
 ### R10: 実行手順の文書化
 - `docs/compose/reports/releases-installer-test.md` に 1 コマンド実行手順を記載:
-  `GH_REPO=kuwa2005/OpenMimoCode ./script/release patch` (または `gh workflow run publish.yml -f bump=patch`)。
+  `GH_REPO=kuwa2005/oimo ./script/release patch` (または `gh workflow run publish.yml -f bump=patch`)。
 - npm/FDS を有効化するにはリポジトリシークレット `NPM_TOKEN` / `MIMO_FDS_AK` / `MIMO_FDS_SK` を設定する必要がある旨を明記。
 
 ## テスト仕様

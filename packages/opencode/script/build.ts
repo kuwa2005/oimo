@@ -226,10 +226,10 @@ for (const item of targets) {
         description: "Platform-specific binary for @mimo-ai/cli.",
         license: "MIT",
         author: "Open Open Mimo Code Team",
-        homepage: "https://github.com/kuwa2005/OpenMimoCode",
+        homepage: "https://github.com/kuwa2005/oimo",
         repository: {
           type: "git",
-          url: "git+https://github.com/kuwa2005/OpenMimoCode.git",
+          url: "git+https://github.com/kuwa2005/oimo.git",
         },
         keywords: ["ai", "coding", "agent", "cli", "mimo"],
         os: [item.os],

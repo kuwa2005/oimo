@@ -16,7 +16,7 @@ Open Mimo Code の **ビルトインスキル**、**Compose フェーズ**、**�
 ## 実行
 
 ```bash
-# 既定: ../agent-skills（OpenMimoCode の隣）
+# 既定: ../agent-skills（oimo の隣）
 bun script/export-agent-skills.ts
 
 # パス指定

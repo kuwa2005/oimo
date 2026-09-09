@@ -271,7 +271,7 @@ ${meta.phases.map((p, i) => `${i + 1}. **${p.title}** — ${p.detail}`).join("\n
 
 oimo runs this as \`.oimo/workflows/${meta.name}.js\` with a \`workflow\` tool. On Cursor/OpenCode, **you** orchestrate the phases: spawn subtasks or follow the phase list sequentially, writing checkpoints to disk between phases.
 
-Source: \`packages/opencode/src/workflow/builtin/${file}\` in OpenMimoCode.
+Source: \`packages/opencode/src/workflow/builtin/${file}\` in oimo.
 `
     const fname = `${meta.name}.md`
     await writeFile(path.join(refDest, fname), body)
@@ -344,7 +344,7 @@ async function writeCatalog() {
     "goal-driven-stop",
   ]
   const lines = [
-    "# Exported from OpenMimoCode (bun script/export-agent-skills.ts)",
+    "# Exported from oimo (bun script/export-agent-skills.ts)",
     "# Install: ./install.sh compose-next evolve  OR  ./install.sh $(cat optional-oimo.txt | grep -v '^#')",
     ...exported,
     "",
@@ -360,7 +360,7 @@ async function writeCatalog() {
 async function main() {
   if (!(await exists(agentSkillsRoot))) {
     console.error(`agent-skills root not found: ${agentSkillsRoot}`)
-    console.error("Set AGENT_SKILLS_ROOT or clone github.com/kuwa2005/agent-skills beside OpenMimoCode")
+    console.error("Set AGENT_SKILLS_ROOT or clone github.com/kuwa2005/agent-skills beside oimo")
     process.exit(1)
   }
   console.log(`Exporting to ${skillsOut}${dryRun ? " (dry-run)" : ""}`)

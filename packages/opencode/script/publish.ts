@@ -46,13 +46,13 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         "Open Mimo Code (oimo): self-evolving terminal AI coding agent with FDE/SE autonomy and multi-repo workspaces — Where Models and Agents Co-Evolve",
       license: "MIT",
       author: "kuwa2005",
-      homepage: "https://github.com/kuwa2005/OpenMimoCode",
+      homepage: "https://github.com/kuwa2005/oimo",
       repository: {
         type: "git",
-        url: "git+https://github.com/kuwa2005/OpenMimoCode.git",
+        url: "git+https://github.com/kuwa2005/oimo.git",
       },
       bugs: {
-        url: "https://github.com/kuwa2005/OpenMimoCode/issues",
+        url: "https://github.com/kuwa2005/oimo/issues",
       },
       keywords: ["ai", "cli", "code", "xiaomi", "mimo", "oimo"],
       bin: {

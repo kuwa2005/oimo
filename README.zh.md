@@ -1,7 +1,7 @@
 <h1 align="center">Open Mimo Code</h1>
 
 <p align="center">
-  <img src="assets/readme/OpenMimoCode.png" alt="Open Mimo Code" width="700">
+  <img src="assets/readme/oimo.png" alt="Open Mimo Code" width="700">
 </p>
 
 <p align="center"><strong>Open Mimo Code: Where Models and Agents Co-Evolve</strong></p>
@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kuwa2005/OpenMimoCode">GitHub</a> | <a href="https://github.com/kuwa2005/OpenMimoCode/releases">发行版</a>
+  <a href="https://github.com/kuwa2005/oimo">GitHub</a> | <a href="https://github.com/kuwa2005/oimo/releases">发行版</a>
 </p>
 
 ---
@@ -29,20 +29,16 @@ Open Mimo Code 是一个终端原生的 AI 编程助手。它能读写代码、�
 **macOS / Linux**（一键安装）:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install | bash
+curl -fsSL https://raw.githubusercontent.com/kuwa2005/oimo/main/install | bash
 ```
 
 **Windows PowerShell**（一键安装）:
 
 ```powershell
-powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/OpenMimoCode/main/install.ps1 | iex"
+powershell -ep Bypass -c "irm https://raw.githubusercontent.com/kuwa2005/oimo/main/install.ps1 | iex"
 ```
 
-**npm**（全平台）:
-
-```bash
-npm install -g @mimo-ai/cli
-```
+发行渠道仅为 GitHub Releases 二进制（与上游 `@mimo-ai/*` npm 包无关）。
 
 **运行**:
 

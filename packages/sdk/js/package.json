@@ -7,14 +7,14 @@
   "type": "module",
   "license": "MIT",
   "author": "Open Mimo Code Team",
-  "homepage": "https://github.com/kuwa2005/OpenMimoCode",
+  "homepage": "https://github.com/kuwa2005/oimo",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kuwa2005/OpenMimoCode.git",
+    "url": "git+https://github.com/kuwa2005/oimo.git",
     "directory": "packages/sdk/js"
   },
   "bugs": {
-    "url": "https://github.com/kuwa2005/OpenMimoCode/issues"
+    "url": "https://github.com/kuwa2005/oimo/issues"
   },
   "publishConfig": {
     "access": "public"
