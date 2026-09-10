@@ -1,4 +1,4 @@
-# release workflow: tag push (v*) -> build-cli matrix -> assemble (checksums + softprops release + npm)
+# release workflow: tag push (v*) -> build-cli matrix -> assemble (checksums + softprops release)
 name: release
 run-name: "release ${{ github.ref_name }}"
 

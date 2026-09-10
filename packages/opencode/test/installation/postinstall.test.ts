@@ -59,7 +59,8 @@ describe("postinstall", () => {
     })
 
     const stdout = result.stdout.toString()
-    expect(stdout).toContain("Recommended: install Open Mimo Code natively for a better")
+    expect(stdout).toContain("This package path is not used by kuwa2005/oimo")
+    expect(stdout).toContain("Install from GitHub Releases")
     expect(stdout).toContain(os.platform() === "win32" ? "    irm" : "    curl")
   })
 
@@ -76,7 +77,7 @@ describe("postinstall", () => {
     })
 
     expect(result.exitCode).toBe(1)
-    expect(result.stdout.toString()).toContain("Recommended: install Open Mimo Code natively")
+    expect(result.stdout.toString()).toContain("Install from GitHub Releases")
   })
 
   test("skips binary cache on windows but still prints notice", () => {

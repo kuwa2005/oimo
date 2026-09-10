@@ -135,7 +135,7 @@ describe("T2-T4: installer end-to-end (fake release server + OIMO_BASE_URL)", ()
 })
 
 describe("T5: release.yml static checks", () => {
-  test("defines the tag-triggered release pipeline (v* tags, matrix, softprops, npm skip)", async () => {
+  test("defines the tag-triggered release pipeline (v* tags, matrix, softprops, no npm)", async () => {
     const yaml = await Bun.file(path.join(ROOT, ".github", "workflows", "release.yml")).text()
     expect(yaml).toContain('"v*"')
     expect(yaml).toContain("contents: write")
@@ -144,9 +144,10 @@ describe("T5: release.yml static checks", () => {
     expect(yaml).toContain("MIMOCODE_SKIP_UPLOAD")
     expect(yaml).toContain("GH_REPO")
     expect(yaml).toContain("packages/opencode/script/build.ts")
-    expect(yaml).toContain("script/publish.ts")
     expect(yaml).toContain("softprops/action-gh-release@v2")
-    expect(yaml).toContain('if [ -z "$NPM_TOKEN" ]')
+    expect(yaml).toContain("does not publish to npm")
+    expect(yaml).not.toContain("script/publish.ts")
+    expect(yaml).not.toContain('if [ -z "$NPM_TOKEN" ]')
     expect(yaml).not.toContain("script/version.ts")
   })
 })

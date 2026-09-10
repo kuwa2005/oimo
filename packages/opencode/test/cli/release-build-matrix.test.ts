@@ -110,8 +110,10 @@ describe("release build matrix: release.yml", () => {
     expect(yml).toContain("contents: write")
   })
 
-  test("T3g: npm publish is guarded by NPM_TOKEN presence", () => {
-    expect(yml).toContain('if [ -z "$NPM_TOKEN" ]')
+  test("T3g: fork skips npm publish (GitHub Releases only)", () => {
+    expect(yml).toContain("does not publish to npm")
+    expect(yml).not.toContain("script/publish.ts")
+    expect(yml).not.toContain('if [ -z "$NPM_TOKEN" ]')
   })
 
   test("T3h: archives flow through upload/download artifacts", () => {
