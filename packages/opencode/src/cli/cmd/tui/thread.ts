@@ -307,8 +307,14 @@ export const TuiThreadCommand = cmd({
       const spauto = !!args.spauto
       const fde = !!args.fde
       const se = !!args.autonomy
-      // --se and --fde may be combined: autonomy persona prefers FDE when --fde is set;
-      // Friction Learning runs with both SE and FDE analysis lenses.
+      const { resolveAutonomyRequest } = await import("@/autonomy/resolve")
+      const autonomyReq = resolveAutonomyRequest({
+        source: "cli",
+        se,
+        fde,
+        spauto,
+      })
+      // --se and --fde may be combined: canonical profile=fde with both learning lenses.
       const characterRaw =
         typeof args.character === "string" ? args.character : args.character === true ? "" : undefined
       const characterMode = (await import("@/character/mode")).resolveCharacterCli(characterRaw)
@@ -355,24 +361,27 @@ export const TuiThreadCommand = cmd({
         process.env.MIMOCODE_AUTO_APPROVE_DELETE = "1"
       }
 
-      if (se || fde || spauto) {
+      if (autonomyReq.request.profile !== "off") {
         process.env.MIMOCODE_AUTONOMY = "1"
         // Safe permission auto-approve base (forced-ask still human-gated unless spauto/auto).
+        // full_auto (super_auto) still sets skip-permissions; safe_auto migration continues in later PRs.
         process.env.MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS = "1"
       }
 
-      if (fde) {
+      if (autonomyReq.request.profile === "fde") {
         process.env.MIMOCODE_FDE = "1"
-        process.env.MIMOCODE_FRICTION_FDE = "1"
       }
 
-      if (se) {
+      if (autonomyReq.request.learningLenses.includes("fde")) {
+        process.env.MIMOCODE_FRICTION_FDE = "1"
+      }
+      if (autonomyReq.request.learningLenses.includes("se")) {
         process.env.MIMOCODE_FRICTION_SE = "1"
       }
 
       process.env.MIMOCODE_CHARACTER = characterMode
 
-      if (spauto) {
+      if (autonomyReq.request.profile === "super_auto") {
         process.env.MIMOCODE_SPAUTO = "1"
       }
 

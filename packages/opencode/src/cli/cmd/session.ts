@@ -146,9 +146,8 @@ export const SessionListCommand = cmd({
       }
 
       if (args.autonomy && args.fde) {
-        UI.error("--se and --fde cannot be used together (conflicting autonomy personas)")
-        await Log.exit(1)
-        return
+        // Canonical: profile=fde, learningLenses=[se,fde] — same as TUI / CLI direct.
+        // Kept as a soft notice only; do not reject (blocker #5).
       }
       if (args.continue && args.warm) {
         UI.error("--continue and --warm cannot be used together")
