@@ -165,13 +165,21 @@ export const Flag = {
   // allow-all base ruleset is injected UNDER the user's config permission so
   // every tool auto-approves unless the user explicitly denied it.
   MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS: truthy("MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS"),
-  // Set by `oimo --autonomy` / `oimo --se` / `oimo --fde`. Forces autonomy.enabled for this process.
-  MIMOCODE_AUTONOMY: truthy("MIMOCODE_AUTONOMY"),
-  // Set by `oimo --fde`. Forward Deployed Engineer persona (hearing_first + Solution Lock).
-  MIMOCODE_FDE: truthy("MIMOCODE_FDE"),
-  // Friction Learning analysis lenses (integrated into --se / --fde; no dedicated CLI flag).
-  MIMOCODE_FRICTION_SE: truthy("MIMOCODE_FRICTION_SE"),
-  MIMOCODE_FRICTION_FDE: truthy("MIMOCODE_FRICTION_FDE"),
+  // Bootstrap env for worker processes. Read at access time — not import-time
+  // constants — so CLI can set env after Flag module load (FDE/SE §7.2).
+  // Runtime autonomy truth is AutonomyRun / resolveAutonomyRequest, not these.
+  get MIMOCODE_AUTONOMY() {
+    return truthy("MIMOCODE_AUTONOMY")
+  },
+  get MIMOCODE_FDE() {
+    return truthy("MIMOCODE_FDE")
+  },
+  get MIMOCODE_FRICTION_SE() {
+    return truthy("MIMOCODE_FRICTION_SE")
+  },
+  get MIMOCODE_FRICTION_FDE() {
+    return truthy("MIMOCODE_FRICTION_FDE")
+  },
   // Presentation layer for Friction Learning feedback: default | off (future: osaka, …).
   get MIMOCODE_CHARACTER() {
     return process.env["MIMOCODE_CHARACTER"]?.trim() || "off"

@@ -14,7 +14,13 @@ import { BusEvent } from "@/bus/bus-event"
 import { Session } from "@/session"
 import { SessionID } from "./schema"
 import { MessageV2 } from "./message-v2"
-import { goalRef, type GoalPhase } from "./goal-ref"
+import { AutonomyBridge } from "@/autonomy/bridge"
+import { getLatestRunForSession } from "@/autonomy/run"
+import type { GoalPhase } from "./goal-ref"
+import { canonicalizeGoalPhase } from "./goal-ref"
+
+export type { GoalPhase }
+export { isHearingLike, isExecuteLike, canonicalizeGoalPhase } from "./goal-ref"
 
 /**
  * Per-session stop-condition goal. `/goal` or autonomy mode: once a goal
@@ -26,8 +32,6 @@ import { goalRef, type GoalPhase } from "./goal-ref"
  * State lives in InstanceState (per project instance), keyed by sessionID, and
  * is cleared on instance teardown. See run-state.ts for the sibling pattern.
  */
-
-export type { GoalPhase }
 
 export type GoalStopReason =
   | "completed"
@@ -52,7 +56,7 @@ export type Goal = {
   judgeMaxRetries: number
   judgeFailures: number
   autonomous: boolean
-  /** hearing = clarify with user; execute = never-ask non-stop delivery. */
+  /** AutonomyPhase — discover/lock_pending/…; not a parallel hearing|execute enum. */
   phase: GoalPhase
   stopReason?: GoalStopReason
   /** Multi-repo binding — required together for safe resume. */
@@ -78,7 +82,32 @@ const GoalView = z.object({
   maxDurationMs: z.number().optional(),
   maxCostUsd: z.number().optional(),
   autonomous: z.boolean().optional(),
-  phase: z.enum(["hearing", "execute"]).optional(),
+  phase: z
+    .enum([
+      "discover",
+      "lock_pending",
+      "execute",
+      "verify",
+      "judge",
+      "waiting_user",
+      "completed",
+      "blocked",
+      "cancelled",
+      // legacy aliases accepted in views until clients catch up
+      "hearing",
+    ])
+    .optional(),
+  autonomy: z
+    .object({
+      runID: z.string(),
+      profile: z.string(),
+      phase: z.string(),
+      stopReason: z.string().optional(),
+      gateID: z.string().optional(),
+      testAttempts: z.number(),
+      maxTestAttempts: z.number().optional(),
+    })
+    .optional(),
 })
 
 /**
@@ -176,7 +205,22 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionGoal") {}
 
-function goalView(goal: Goal) {
+function goalView(goal: Goal, sessionID: SessionID) {
+  const run = getLatestRunForSession(sessionID)
+  const autonomy =
+    run && run.phase !== "cancelled"
+      ? {
+          runID: run.id,
+          profile: run.profile,
+          phase: run.phase,
+          stopReason: run.stopReason,
+          gateID: run.activeGateID,
+          testAttempts: run.counters.testAttempts,
+          maxTestAttempts: run.budgets.maxTestAttempts,
+        }
+      : undefined
+  // Prefer durable AutonomyRun.phase when present — single source of truth.
+  const phase = (run && run.phase !== "cancelled" ? run.phase : goal.phase) as GoalPhase
   return {
     condition: goal.condition,
     react: goal.react,
@@ -186,7 +230,8 @@ function goalView(goal: Goal) {
     maxDurationMs: goal.maxDurationMs,
     maxCostUsd: goal.maxCostUsd,
     autonomous: goal.autonomous,
-    phase: goal.phase,
+    phase,
+    autonomy,
   }
 }
 
@@ -213,7 +258,7 @@ export const layer = Layer.effect(
     }) {
       yield* bus.publish(Event.Updated, {
         sessionID: input.sessionID,
-        goal: input.goal ? goalView(input.goal) : undefined,
+        goal: input.goal ? goalView(input.goal, input.sessionID) : undefined,
         stopReason: input.stopReason,
         lastVerdict: input.lastVerdict,
       })
@@ -223,8 +268,9 @@ export const layer = Layer.effect(
       const cfg = yield* config.get()
       const limits = input.limits ?? ConfigAutonomy.limits(cfg.autonomy)
       const autonomous = input.autonomous ?? false
-      const phase =
-        input.phase ?? (autonomous && ConfigAutonomy.hearingFirst(cfg.autonomy) ? "hearing" : "execute")
+      const phase = canonicalizeGoalPhase(
+        input.phase ?? (autonomous && ConfigAutonomy.hearingFirst(cfg.autonomy) ? "discover" : "execute"),
+      )
       const data = yield* InstanceState.get(state)
 
       // Bind live multi-repo state when a workspace is active so Goal / Change set / scope resume together.
@@ -291,11 +337,12 @@ export const layer = Layer.effect(
       const data = yield* InstanceState.get(state)
       const goal = data.goals.get(sessionID)
       if (!goal) return undefined
-      if (goal.phase === phase) return phase
-      goal.phase = phase
-      yield* elog.info("goal phase", { sessionID, phase })
+      const next = canonicalizeGoalPhase(phase)
+      if (goal.phase === next) return next
+      goal.phase = next
+      yield* elog.info("goal phase", { sessionID, phase: next })
       yield* publish({ sessionID, goal })
-      return phase
+      return next
     })
 
     const enterSpecial = Effect.fn("SessionGoal.enterSpecial")(function* (sessionID: SessionID) {
@@ -328,9 +375,10 @@ export const layer = Layer.effect(
       return n
     })
 
-    // Bridge for question-tool Requirements Lock without a ToolRegistry↔Goal cycle.
-    goalRef.register((sessionID, phase) => {
-      Effect.runFork(setPhase(sessionID, phase))
+    // Bridge for question-tool Lock Gate without a ToolRegistry↔Goal cycle.
+    // Replaces process-global goalRef — AutonomyBridge is the only registrant path.
+    AutonomyBridge.registerLockApproved((sessionID) => {
+      Effect.runFork(setPhase(sessionID, "execute"))
     })
 
     const stopWithReason = Effect.fn("SessionGoal.stopWithReason")(function* (input: {
@@ -434,6 +482,35 @@ export const layer = Layer.effect(
           const gate = assertEvidenceAllowsComplete(manifest)
           if (!gate.ok) {
             return { ok: false, reason: gate.reason } satisfies Verdict
+          }
+        }
+      }
+
+      // AutonomyRun Evidence Manifest (FDE/SE §13): when a manifest exists or the
+      // run is in judge phase, never complete on prose alone; judge_unavailable ≠ complete.
+      {
+        const run = getLatestRunForSession(input.sessionID)
+        if (run?.lockedScope && run.phase !== "cancelled" && run.profile !== "off") {
+          const { getLatestManifest, judgeFromManifest } = yield* Effect.promise(() => import("@/autonomy/evidence"))
+          const manifest = getLatestManifest(run.id)
+          if (manifest || run.phase === "judge") {
+            const verdict = judgeFromManifest({
+              lockedScope: run.lockedScope,
+              manifest,
+              judgeAvailable: true,
+            })
+            if (verdict.status === "judge_unavailable") {
+              return {
+                ok: false,
+                reason: `judge_unavailable: ${verdict.reason}`,
+              } satisfies Verdict
+            }
+            if (verdict.status === "blocked") {
+              return { ok: false, reason: verdict.reasons.join("; ") } satisfies Verdict
+            }
+            if (verdict.status === "rework") {
+              return { ok: false, reason: verdict.reasons.join("; ") } satisfies Verdict
+            }
           }
         }
       }

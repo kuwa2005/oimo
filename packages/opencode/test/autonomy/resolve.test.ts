@@ -62,7 +62,7 @@ describe("resolveAutonomyRequest", () => {
   })
 
   test("legacyModeFromProfile bridge", () => {
-    expect(legacyModeFromProfile("se")).toBe("normal")
+    expect(legacyModeFromProfile("se")).toBe("se")
     expect(legacyModeFromProfile("super_auto")).toBe("special")
     expect(legacyModeFromProfile("off")).toBe("none")
   })

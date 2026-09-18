@@ -8,7 +8,7 @@ import { useLanguage } from "@tui/context/language"
 import { useRoute } from "@tui/context/route"
 import * as ConfigAutonomy from "@/config/autonomy"
 
-const MODE_ORDER: ConfigAutonomy.Mode[] = ["none", "normal", "fde", "special"]
+const MODE_ORDER: ConfigAutonomy.Mode[] = ["none", "se", "fde", "special"]
 
 export function DialogAutoMode() {
   const dialog = useDialog()
@@ -18,6 +18,8 @@ export function DialogAutoMode() {
   const toast = useToast()
   const route = useRoute()
   const t = useLanguage().t
+  const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+  // In-memory config is updated by the server on /auto; session Run is durable server-side.
   const current = ConfigAutonomy.mode(sync.data.config)
 
   const apply = async (next: ConfigAutonomy.Mode) => {
@@ -64,9 +66,6 @@ export function DialogAutoMode() {
       }
     }
 
-    // Live switch (no instance dispose) so in-flight goals survive — critical when
-    // the user answers a few questions under --se /auto normal then flips to special.
-    ConfigAutonomy.applyProcessEnv(next)
     const headers: Record<string, string> = {
       "content-type": "application/json",
     }
@@ -74,7 +73,11 @@ export function DialogAutoMode() {
     const res = await sdk.fetch(`${sdk.url}/config/autonomy-mode`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ mode: next }),
+      body: JSON.stringify({
+        mode: next,
+        scope: sessionID ? "session" : "default",
+        ...(sessionID ? { sessionID } : {}),
+      }),
     })
     if (!res.ok) {
       toast.show({ variant: "error", message: t("tui.dialog.auto_mode.error", { status: String(res.status) }) })
@@ -84,6 +87,7 @@ export function DialogAutoMode() {
     const body = (await res.json()) as {
       config?: (typeof sync.data)["config"]
       goalsPromoted?: number
+      reLockRequired?: boolean
     }
     if (body.config) sync.set("config", body.config as (typeof sync.data)["config"])
 
@@ -91,16 +95,15 @@ export function DialogAutoMode() {
       local.neverAsk.set(false)
       local.skipPermissions.set(false)
     }
-    if (next === "normal" || next === "fde") {
+    if (next === "se" || next === "normal" || next === "fde") {
       local.neverAsk.set(false)
-      local.skipPermissions.set(true)
+      local.skipPermissions.set(false)
       local.agent.forceSwitch("compose")
     }
     if (next === "special") {
       local.neverAsk.set(true)
       local.skipPermissions.set(true)
       local.agent.forceSwitch("compose")
-      // Nudge the open session so work resumes without waiting for another human answer.
       if (route.data.type === "session") {
         void sdk.client.session
           .promptAsync({
@@ -123,7 +126,9 @@ export function DialogAutoMode() {
 
     toast.show({
       variant: next === "special" ? "warning" : "info",
-      message: t(`tui.dialog.auto_mode.toast.${next}`),
+      message: body.reLockRequired
+        ? `${t(`tui.dialog.auto_mode.toast.${next}`)} (re-lock required)`
+        : t(`tui.dialog.auto_mode.toast.${next}`),
       duration: 4000,
     })
     dialog.clear()

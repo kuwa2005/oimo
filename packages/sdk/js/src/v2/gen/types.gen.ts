@@ -870,6 +870,15 @@ export type EventSessionGoal = {
       maxCostUsd?: number
       autonomous?: boolean
       phase?: "hearing" | "execute"
+      autonomy?: {
+        runID: string
+        profile: string
+        phase: string
+        stopReason?: string
+        gateID?: string
+        testAttempts: number
+        maxTestAttempts?: number
+      }
     }
     stopReason?: string
     lastVerdict?: {
@@ -2460,7 +2469,7 @@ export type Config = {
   }
   evolve?: {
     /**
-     * Auto-trigger Self Improvement Session (evolve) on new session start and write logs under ~/.oimo/evolve/<projectID>/. Default: true (opt-out with false).
+     * Auto-trigger Self Improvement Session (evolve) on new session start. Default: false (opt-in). Legacy installs that relied on opt-out should set evolve.auto: true explicitly.
      */
     auto?: boolean
     /**
@@ -2498,9 +2507,57 @@ export type Config = {
       enabled?: boolean
     }
     /**
-     * Allow auto-evolve to fire early when HAC/corrections/tool-churn thresholds are hit (requires evolve.auto, which defaults to true). Default: true.
+     * Allow auto-evolve to fire early when HAC/corrections/tool-churn thresholds are hit (requires evolve.auto: true). Default: true when auto is enabled.
      */
     condition_triggers?: boolean
+  }
+  evolution?: {
+    /**
+     * Master switch for Continuous Self-Evolution features. Default: true when unset.
+     */
+    enabled?: boolean
+    /**
+     * Consent schema version the user accepted. Bump to re-prompt.
+     */
+    consent_version?: number
+    /**
+     * Days to retain Evolution evidence metadata. Default: 90.
+     */
+    retention_days?: number
+    /**
+     * Pause all automatic Continuous Self-Evolution runs. Default: false.
+     */
+    paused?: boolean
+    soft?: {
+      /**
+       * Auto-generate soft-evolution artifacts. Default: false (opt-in).
+       */
+      auto_generate?: boolean
+      /**
+       * Auto-activate soft artifacts after validation. Default: false.
+       */
+      auto_activate?: boolean
+    }
+    hard?: {
+      /**
+       * Auto-generate hard-evolution briefs. Default: false (opt-in).
+       */
+      auto_generate_briefs?: boolean
+      /**
+       * Allow evolve-apply product delivery workflow. Default: false.
+       */
+      allow_product_apply?: boolean
+    }
+    privacy?: {
+      /**
+       * Redact secrets from Evidence and briefs. Default: true.
+       */
+      redact_secrets?: boolean
+      /**
+       * Allow raw user text in Evidence excerpts. Default: false.
+       */
+      include_raw_user_text?: boolean
+    }
   }
   /**
    * Voice input provider and model configuration.
@@ -3987,7 +4044,9 @@ export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateRespo
 
 export type ConfigAutonomyModeData = {
   body?: {
-    mode: "none" | "normal" | "fde" | "special"
+    mode: "none" | "se" | "normal" | "fde" | "special"
+    scope?: "session" | "default"
+    sessionID?: string
   }
   path?: never
   query?: {
@@ -4012,8 +4071,11 @@ export type ConfigAutonomyModeResponses = {
    */
   200: {
     config: Config
-    mode: "none" | "normal" | "fde" | "special"
+    mode: "none" | "se" | "normal" | "fde" | "special"
     goalsPromoted: number
+    reLockRequired: boolean
+    scope: "session" | "default"
+    runID?: string
   }
 }
 

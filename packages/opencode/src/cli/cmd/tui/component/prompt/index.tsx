@@ -1861,15 +1861,21 @@ export function Prompt(props: PromptProps) {
                 <Show when={autonomyActive() && sessionGoal()?.condition}>
                   <text>
                     <span style={{ fg: theme.warning, bold: true }}>
-                      «autonomy:{sessionGoal()?.phase ?? "?"}» {sessionGoal()?.react ?? 0}/
+                      «autonomy:{sessionGoal()?.autonomy?.phase ?? sessionGoal()?.phase ?? "?"}»
+                      {sessionGoal()?.autonomy?.gateID ? " 🔒" : ""} {sessionGoal()?.react ?? 0}/
                       {sessionGoal()?.maxTurns ?? "?"} · ${(sessionGoal()?.costUsd ?? 0).toFixed(2)}/$
                       {sessionGoal()?.maxCostUsd ?? "?"}
+                      {sessionGoal()?.autonomy
+                        ? ` · tests ${sessionGoal()?.autonomy?.testAttempts ?? 0}/${sessionGoal()?.autonomy?.maxTestAttempts ?? "?"}`
+                        : ""}
                     </span>
                   </text>
                 </Show>
-                <Show when={sessionGoal()?.stopReason}>
+                <Show when={sessionGoal()?.autonomy?.stopReason || sessionGoal()?.stopReason}>
                   <text>
-                    <span style={{ fg: theme.error }}>stopped: {sessionGoal()?.stopReason}</span>
+                    <span style={{ fg: theme.error }}>
+                      stopped: {sessionGoal()?.autonomy?.stopReason ?? sessionGoal()?.stopReason}
+                    </span>
                   </text>
                 </Show>
               </box>

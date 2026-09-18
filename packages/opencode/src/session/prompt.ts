@@ -1048,7 +1048,7 @@ export const layer = Layer.effect(
           const autonomyPrompt = special ? PROMPT_AUTONOMY_SP : fde ? PROMPT_AUTONOMY_FDE : PROMPT_AUTONOMY_SE
           const phaseHint = special
             ? "\nCurrent mode: SPECIAL (Super Auto) — raise doubts, self-answer, never wait; deliver non-stop with documentary evidence."
-            : activeGoal.phase === "hearing"
+            : Goal.isHearingLike(activeGoal.phase)
               ? fde
                 ? "\nCurrent phase: FDE DISCOVERY — investigate field problem, propose Level 1–3, PoC spikes allowed; ask Solution Lock before production implementation."
                 : "\nCurrent phase: HEARING — clarify and lock requirements before implementation."
@@ -1066,10 +1066,10 @@ export const layer = Layer.effect(
         }
       }
 
-      // Friction Learning (--se / --fde): detect gaps, update rules, inject presentation + learned requirements.
-      if (Friction.frictionLearningEnabled()) {
+      // Friction Learning (--se / --fde): prefer Run.learningLenses; Flag is bootstrap fallback.
+      if (Friction.frictionLearningEnabled(input.session.id)) {
         const ctx = yield* InstanceState.context
-        const modes = Friction.frictionModesFromFlag()
+        const modes = Friction.frictionModesForSession(input.session.id)
         const characterMode = Friction.characterModeFromFlag()
         const userText = userMessage.parts
           .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text" && !p.synthetic)
@@ -2959,7 +2959,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const cfg = yield* config.get()
           if (!ConfigAutonomy.enabled(cfg)) return INVALID_OUTPUT_CONTINUATION_LIMIT
           const active = yield* goal.get(sessionID)
-          if (active?.phase === "hearing" && ConfigAutonomy.hearingFirst(cfg.autonomy)) {
+          if (Goal.isHearingLike(active?.phase) && ConfigAutonomy.hearingFirst(cfg.autonomy)) {
             return Math.min(INVALID_OUTPUT_CONTINUATION_LIMIT, INVALID_OUTPUT_HEARING_LIMIT)
           }
           return Math.max(INVALID_OUTPUT_CONTINUATION_LIMIT, 8)
@@ -3188,7 +3188,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             transcriptMsgs.findLast((m) => m.info.role === "assistant")?.parts ?? []
           const visible = assistantVisibleText(lastAssistantParts)
           if (visible && isAwaitingUserOrDone(visible)) {
-            const reason = active.phase === "hearing" ? "waiting_user" : "completed"
+            const reason = Goal.isHearingLike(active.phase) ? "waiting_user" : "completed"
             yield* slog.info("goal stop: assistant awaiting user or done", {
               sessionID,
               phase: active.phase,

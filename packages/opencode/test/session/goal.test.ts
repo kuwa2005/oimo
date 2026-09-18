@@ -97,22 +97,22 @@ describe("Goal state machine", () => {
     if (!result.ok) expect(result.reason).toBe("budget_turns")
   })
 
-  test("autonomous hearing_first starts in hearing phase", async () => {
+  test("autonomous hearing_first starts in discover phase", async () => {
     await using tmp = await tmpdir({})
     const got = await runGoal(tmp.path, (goal) =>
       Effect.gen(function* () {
-        yield* goal.set(ses, { condition: "build calc", autonomous: true, phase: "hearing" })
+        yield* goal.set(ses, { condition: "build calc", autonomous: true, phase: "discover" })
         return yield* goal.get(ses)
       }),
     )
-    expect(got?.phase).toBe("hearing")
+    expect(got?.phase).toBe("discover")
   })
 
-  test("setPhase advances hearing to execute", async () => {
+  test("setPhase advances discover to execute", async () => {
     await using tmp = await tmpdir({})
     const result = await runGoal(tmp.path, (goal) =>
       Effect.gen(function* () {
-        yield* goal.set(ses, { condition: "x", autonomous: true, phase: "hearing" })
+        yield* goal.set(ses, { condition: "x", autonomous: true, phase: "discover" })
         const next = yield* goal.setPhase(ses, "execute")
         const current = yield* goal.get(ses)
         return { next, phase: current?.phase }
@@ -120,6 +120,17 @@ describe("Goal state machine", () => {
     )
     expect(result.next).toBe("execute")
     expect(result.phase).toBe("execute")
+  })
+
+  test("legacy hearing phase canonicalizes to discover", async () => {
+    await using tmp = await tmpdir({})
+    const got = await runGoal(tmp.path, (goal) =>
+      Effect.gen(function* () {
+        yield* goal.set(ses, { condition: "legacy", autonomous: true, phase: "hearing" as never })
+        return yield* goal.get(ses)
+      }),
+    )
+    expect(got?.phase).toBe("discover")
   })
 
   test("set resets react back to 0", async () => {

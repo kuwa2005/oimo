@@ -146,6 +146,19 @@ export const SessionListCommand = cmd({
       }
 
       // --se --fde: same canonical rule as TUI (profile=fde, lenses se+fde). Do not reject.
+      {
+        const { resolveAutonomyFromArgv } = await import("../autonomy-parse")
+        const check = resolveAutonomyFromArgv([
+          ...(args.autonomy ? ["--se"] : []),
+          ...(args.fde ? ["--fde"] : []),
+          ...(args.spauto ? ["--spauto"] : []),
+        ], "session_list")
+        if (check.errors.length) {
+          UI.error(check.errors.join("; "))
+          await Log.exit(1)
+          return
+        }
+      }
       if (args.continue && args.warm) {
         UI.error("--continue and --warm cannot be used together")
         await Log.exit(1)

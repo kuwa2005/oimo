@@ -67,13 +67,20 @@ export function enabled(cfg: { autonomy?: Info; experimental?: { auto_continue?:
   return cfg.experimental?.auto_continue === true
 }
 
-/** Runtime / UI auto-mode tiers selectable via `/auto`. */
-export type Mode = "none" | "normal" | "special" | "fde"
+/** Runtime / UI auto-mode tiers selectable via `/auto`.
+ * Canonical SE is `"se"`. `"normal"` is a deprecated compatibility alias. */
+export type Mode = "none" | "se" | "special" | "fde" | "normal"
 
-const MODES: readonly Mode[] = ["none", "normal", "special", "fde"]
+const MODES: readonly Mode[] = ["none", "se", "special", "fde", "normal"]
 
 export function isMode(value: string): value is Mode {
   return (MODES as readonly string[]).includes(value)
+}
+
+/** Normalize deprecated `normal` → canonical `se`. */
+export function canonicalMode(mode: Mode): Exclude<Mode, "normal"> {
+  if (mode === "normal") return "se"
+  return mode
 }
 
 /** Default SE when hearing_first; fde only when persona is explicitly fde. */
@@ -81,31 +88,36 @@ export function persona(cfg?: Info): Persona {
   return cfg?.persona === "fde" ? "fde" : "se"
 }
 
-/** Resolve current mode from merged config (after Flag overlays). */
+/** Resolve current mode from merged config (after Flag overlays). Returns canonical `se`, never `normal`. */
 export function mode(cfg: { autonomy?: Info; experimental?: { auto_continue?: boolean } }): Mode {
   if (!enabled(cfg)) return "none"
   if (!hearingFirst(cfg.autonomy)) return "special"
   if (persona(cfg.autonomy) === "fde") return "fde"
-  return "normal"
+  return "se"
 }
 
 /** Config patch written by `/auto` (global oimo.json). */
 export function patchForMode(next: Mode): { autonomy: Info } {
-  if (next === "none") return { autonomy: { enabled: false } }
-  if (next === "special") return { autonomy: { enabled: true, hearing_first: false } }
-  if (next === "fde") return { autonomy: { enabled: true, hearing_first: true, persona: "fde" } }
+  const m = canonicalMode(next)
+  if (m === "none") return { autonomy: { enabled: false } }
+  if (m === "special") return { autonomy: { enabled: true, hearing_first: false } }
+  if (m === "fde") return { autonomy: { enabled: true, hearing_first: true, persona: "fde" } }
   return { autonomy: { enabled: true, hearing_first: true, persona: "se" } }
 }
 
 /**
- * Align process env with `/auto` so Flag.MIMOCODE_* matches the chosen mode
- * after instance dispose/reload (CLI --spauto/--autonomy/--fde must not stick).
+ * @deprecated Do not call from `/auto`. Session-scoped mode must not mutate
+ * process.env (FDE/SE §7.2–7.3). Kept for rare bootstrap/migration callers only.
+ *
+ * Align process env with a mode so Flag.MIMOCODE_* matches after instance
+ * dispose/reload (CLI --spauto/--autonomy/--fde must not stick across /auto).
  */
 export function applyProcessEnv(next: Mode) {
+  const m = canonicalMode(next)
   const clear = (...keys: string[]) => {
     for (const key of keys) delete process.env[key]
   }
-  if (next === "none") {
+  if (m === "none") {
     clear(
       "MIMOCODE_AUTONOMY",
       "MIMOCODE_FDE",
@@ -120,13 +132,13 @@ export function applyProcessEnv(next: Mode) {
   }
   process.env.MIMOCODE_AUTONOMY = "1"
   process.env.MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS = "1"
-  if (next === "special") {
+  if (m === "special") {
     process.env.MIMOCODE_SPAUTO = "1"
     process.env.MIMOCODE_AUTO_APPROVE_DELETE = "1"
     clear("MIMOCODE_FDE", "MIMOCODE_FRICTION_SE", "MIMOCODE_FRICTION_FDE")
     return
   }
-  if (next === "fde") {
+  if (m === "fde") {
     process.env.MIMOCODE_FDE = "1"
     process.env.MIMOCODE_FRICTION_FDE = "1"
     clear("MIMOCODE_SPAUTO", "MIMOCODE_AUTOSP", "MIMOCODE_AUTO_APPROVE_DELETE", "MIMOCODE_FRICTION_SE")

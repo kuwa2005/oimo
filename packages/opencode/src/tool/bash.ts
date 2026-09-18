@@ -943,9 +943,9 @@ export const BashTool = Tool.define(
                       "evolve shell denied: git mutation of product/worktree is forbidden for dream/distill/evolve agents",
                     )
                   }
-                  const absTokens = params.command.match(/\/[\w./-]+/g) ?? []
+                  const absTokens = params.command.match(/\/[-\w./]+/g) ?? []
                   const relTokens =
-                    params.command.match(/(?:^|[\s;|&>])((?:\.\/)?[\w./-]+\.(?:ts|tsx|js|jsx|json|md|py|go|rs))\b/gi) ??
+                    params.command.match(/(?:^|[\s;|&>])((?:\.\/)?[-\w./]+\.(?:ts|tsx|js|jsx|json|md|py|go|rs))\b/gi) ??
                     []
                   const candidates = [
                     ...absTokens,
@@ -966,7 +966,7 @@ export const BashTool = Tool.define(
                   }
                   // Bare redirects to relative product paths under worktree (not .oimo)
                   if (
-                    /(^|[\s;|&])(>|{1,2})\s*(?!.*\.oimo)([\w./-]+\.(ts|tsx|js|json|md))\b/i.test(params.command) &&
+                    /(^|[\s;|&])(>{1,2})\s*(?!.*\.oimo)([-\w./]+\.(ts|tsx|js|json|md))\b/i.test(params.command) &&
                     !params.command.includes(".oimo/") &&
                     !params.command.includes("/.oimo/evolve/")
                   ) {
@@ -1133,6 +1133,47 @@ export const BashTool = Tool.define(
                   jail: repoShellJail,
                 },
                 ctx,
+              ).pipe(
+                Effect.tap((result) =>
+                  Effect.gen(function* () {
+                    if (!/\b(bun\s+test|npm\s+test|vitest|jest|typecheck|pytest)\b/i.test(params.command)) return
+                    const { getLatestRunForSession, bumpCounter } = yield* Effect.promise(() => import("@/autonomy/run"))
+                    const arun = getLatestRunForSession(ctx.sessionID)
+                    if (!arun) return
+                    if (arun.phase !== "verify" && arun.phase !== "judge" && arun.phase !== "execute") return
+                    const { recordTestAttempt, failureSignature, classifyFailure } = yield* Effect.promise(
+                      () => import("@/autonomy/test-attempt"),
+                    )
+                    const exit = typeof result.metadata.exit === "number" ? result.metadata.exit : null
+                    const status =
+                      exit === null
+                        ? ("infra_error" as const)
+                        : exit === 0
+                          ? ("passed" as const)
+                          : ("failed" as const)
+                    const cmd = ["bash", "-lc", params.command]
+                    recordTestAttempt({
+                      runID: arun.id,
+                      command: cmd,
+                      environmentFingerprint: `${process.platform}:${process.version}`,
+                      codeRevision: String(arun.revision),
+                      startedAt: Date.now(),
+                      durationMs: 0,
+                      exitCode: exit,
+                      status,
+                      failureSignature: failureSignature({
+                        command: cmd,
+                        exitCode: exit,
+                        stderrTail: String(result.metadata.output ?? "").slice(-500),
+                      }),
+                      failureClass: classifyFailure({
+                        status,
+                        stderr: String(result.metadata.output ?? ""),
+                      }),
+                    })
+                    bumpCounter({ id: arun.id, field: "testAttempts" })
+                  }),
+                ),
               )
             }),
         }

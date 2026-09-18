@@ -29,6 +29,7 @@ import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
 import { ConfigCompose } from "./compose"
 import * as ConfigAutonomy from "./autonomy"
+import { permissionConfigForPreset } from "../autonomy/safe-auto"
 import * as ConfigReliability from "./reliability"
 import { ConfigFormatter } from "./formatter"
 import { MIMOCODE_GITIGNORE_ENTRIES } from "./gitignore"
@@ -652,7 +653,10 @@ export interface Interface {
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<Info>
   /** In-memory autonomy mode switch without instance dispose (keeps session goals alive). */
-  readonly setAutonomyMode: (mode: import("./autonomy").Mode) => Effect.Effect<Info>
+  readonly setAutonomyMode: (
+    mode: import("./autonomy").Mode,
+    opts?: { persistGlobal?: boolean },
+  ) => Effect.Effect<Info>
   readonly invalidate: (wait?: boolean) => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -1102,24 +1106,38 @@ export const layer = Layer.effect(
           })
         }
 
-        if (Flag.MIMOCODE_AUTONOMY || Flag.MIMOCODE_SPAUTO || Flag.MIMOCODE_FDE) {
-          result.autonomy = { ...result.autonomy, enabled: true }
-        }
-        if (Flag.MIMOCODE_FDE) {
-          // Forward Deployed Engineer (--fde): hearing + Solution Lock; PoC allowed before lock.
-          result.autonomy = { ...result.autonomy, enabled: true, hearing_first: true, persona: "fde" }
-        }
-        if (Flag.MIMOCODE_SPAUTO) {
-          // Super Auto (--spauto / --autosp): skip hearing; decide and execute non-stop.
-          result.autonomy = { ...result.autonomy, enabled: true, hearing_first: false }
-        }
-
-        if (Flag.MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS || ConfigAutonomy.enabled(result)) {
-          // Allow-all base, merged UNDER user config so an explicit deny still
-          // wins. Matches `oimo run --dangerously-skip-permissions`: auto-approve
-          // everything not explicitly denied. Autonomy mode uses the same layer
-          // so routine read/edit/bash asks never block; forced-ask stays human-only.
-          result.permission = mergeDeep({ "*": "allow" } as ConfigPermission.Info, result.permission ?? {})
+        // Bootstrap overlay from process.env (read live via Flag getters / env).
+        // Canonical session mode after start is AutonomyRun (FDE/SE §7.2).
+        {
+          const { resolveAutonomyRequest, legacyModeFromProfile } = yield* Effect.promise(
+            () => import("../autonomy/resolve"),
+          )
+          const boot = resolveAutonomyRequest({
+            source: "cli",
+            env: {
+              MIMOCODE_AUTONOMY: process.env.MIMOCODE_AUTONOMY,
+              MIMOCODE_FDE: process.env.MIMOCODE_FDE,
+              MIMOCODE_SPAUTO: process.env.MIMOCODE_SPAUTO ?? process.env.MIMOCODE_AUTOSP,
+            },
+          })
+          if (boot.request.profile !== "off") {
+            const mode = legacyModeFromProfile(boot.request.profile)
+            result.autonomy = { ...result.autonomy, ...ConfigAutonomy.patchForMode(mode).autonomy }
+          }
+          if (
+            boot.request.permissionPreset === "full_auto" ||
+            Flag.MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS
+          ) {
+            result.permission = mergeDeep({ "*": "allow" } as ConfigPermission.Info, result.permission ?? {})
+          } else if (boot.request.permissionPreset === "safe_auto" || ConfigAutonomy.enabled(result)) {
+            const preset =
+              boot.request.permissionPreset === "safe_auto"
+                ? "safe_auto"
+                : ConfigAutonomy.hearingFirst(result.autonomy) === false
+                  ? "full_auto"
+                  : "safe_auto"
+            result.permission = mergeDeep(permissionConfigForPreset(preset), result.permission ?? {})
+          }
         }
 
         if (Flag.MIMOCODE_PERMISSION) {
@@ -1237,24 +1255,28 @@ export const layer = Layer.effect(
       return next
     })
 
-    const setAutonomyMode = Effect.fn("Config.setAutonomyMode")(function* (mode: import("./autonomy").Mode) {
-      ConfigAutonomy.applyProcessEnv(mode)
+    const setAutonomyMode = Effect.fn("Config.setAutonomyMode")(function* (
+      mode: import("./autonomy").Mode,
+      opts?: { persistGlobal?: boolean },
+    ) {
+      // Never mutate process.env — session /auto must not leak across projects.
       const patch = ConfigAutonomy.patchForMode(mode)
       const s = yield* InstanceState.get(state)
       s.config = { ...s.config, autonomy: { ...s.config.autonomy, ...patch.autonomy } }
 
-      // Persist to global config without dispose/invalidate so in-flight goals survive.
-      const file = globalConfigFile()
-      const before = (yield* readConfigFile(file)) ?? "{}"
-      if (!file.endsWith(".jsonc")) {
-        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), writable(patch))
-        yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
-      } else {
-        const updated = patchJsonc(before, writable(patch))
-        yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+      if (opts?.persistGlobal !== false) {
+        const file = globalConfigFile()
+        const before = (yield* readConfigFile(file)) ?? "{}"
+        if (!file.endsWith(".jsonc")) {
+          const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+          const merged = mergeDeep(writable(existing), writable(patch))
+          yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
+        } else {
+          const updated = patchJsonc(before, writable(patch))
+          yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+        }
+        yield* invalidateGlobal
       }
-      yield* invalidateGlobal
       return s.config
     })
 

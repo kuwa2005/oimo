@@ -20,9 +20,9 @@ const ALLOWED: Record<AutonomyPhase, AutonomyPhase[]> = {
   discover: ["lock_pending", "waiting_user", "blocked", "cancelled"],
   lock_pending: ["discover", "execute", "waiting_user", "cancelled"],
   execute: ["verify", "blocked", "waiting_user", "cancelled"],
-  verify: ["judge", "execute", "blocked", "cancelled"],
+  verify: ["judge", "execute", "blocked", "waiting_user", "cancelled"],
   judge: ["completed", "execute", "verify", "waiting_user", "blocked", "cancelled"],
-  waiting_user: ["discover", "lock_pending", "execute", "cancelled"],
+  waiting_user: ["discover", "lock_pending", "execute", "blocked", "cancelled"],
   completed: [],
   blocked: ["discover", "execute", "waiting_user", "cancelled"],
   cancelled: [],
@@ -34,6 +34,9 @@ export type AutonomyEvent =
   | { type: "lock_approved"; lockedScope: LockedScope }
   | { type: "lock_changes_needed" }
   | { type: "resume" }
+  | { type: "high_risk_proposed" }
+  | { type: "high_risk_approved" }
+  | { type: "high_risk_denied"; reason?: AutonomyStopReason }
   | { type: "implementation_done" }
   | { type: "verify_passed" }
   | { type: "verify_failed" }
@@ -160,6 +163,13 @@ function nextPhase(current: AutonomyPhase, event: AutonomyEvent): {
   if (event.type === "lock_proposed") return { phase: "lock_pending", stopReason: "waiting_for_lock" }
   if (event.type === "lock_changes_needed") return { phase: "discover" }
   if (event.type === "lock_approved") return { phase: "execute", lockedScope: event.lockedScope }
+  if (event.type === "high_risk_proposed") {
+    return { phase: "waiting_user", stopReason: "waiting_for_required_input" }
+  }
+  if (event.type === "high_risk_approved") return { phase: "execute" }
+  if (event.type === "high_risk_denied") {
+    return { phase: "blocked", stopReason: event.reason ?? "blocked_permission" }
+  }
   if (event.type === "resume") {
     if (current === "waiting_user") return { phase: "discover" }
     return { phase: current }
@@ -268,4 +278,77 @@ export function listAudit(runID: string) {
     .where(eq(AutonomyRunAuditTable.run_id, runID))
     .orderBy(desc(AutonomyRunAuditTable.time_created))
     .all()
+}
+
+/** Increment a counter without advancing phase (best-effort; ignores CAS races). */
+export function bumpCounter(input: {
+  id: string
+  field: keyof AutonomyCounters
+  by?: number
+}): AutonomyRunRecord | undefined {
+  const current = getRun(input.id)
+  if (!current) return
+  const next = {
+    ...current.counters,
+    [input.field]: current.counters[input.field] + (input.by ?? 1),
+  }
+  Database.Client()
+    .update(AutonomyRunTable)
+    .set({
+      counters: next,
+      revision: current.revision + 1,
+      time_updated: Date.now(),
+    })
+    .where(and(eq(AutonomyRunTable.id, input.id), eq(AutonomyRunTable.revision, current.revision)))
+    .run()
+  return getRun(input.id)
+}
+
+export function updateProfile(input: {
+  id: string
+  expectedRevision: number
+  profile: AutonomyProfile
+  learningLenses: LearningLens[]
+  clearLock?: boolean
+}): AutonomyRunRecord {
+  const current = getRun(input.id)
+  if (!current) throw new Error(`autonomy run not found: ${input.id}`)
+  if (current.revision !== input.expectedRevision) {
+    throw new Error(
+      `autonomy revision conflict: expected ${input.expectedRevision}, have ${current.revision}`,
+    )
+  }
+  const now = Date.now()
+  const nextRevision = current.revision + 1
+  const clear = Boolean(input.clearLock)
+  Database.Client()
+    .update(AutonomyRunTable)
+    .set({
+      profile: input.profile,
+      learning_lenses: input.learningLenses,
+      revision: nextRevision,
+      locked_scope: clear ? null : current.lockedScope,
+      active_gate_id: clear ? null : current.activeGateID,
+      phase: clear ? "discover" : current.phase,
+      stop_reason: clear ? null : current.stopReason,
+      time_updated: now,
+    })
+    .where(and(eq(AutonomyRunTable.id, input.id), eq(AutonomyRunTable.revision, input.expectedRevision)))
+    .run()
+  const after = getRun(input.id)
+  if (!after || after.revision !== nextRevision) {
+    throw new Error(`autonomy revision CAS failed for ${input.id}`)
+  }
+  appendAudit({
+    runID: current.id,
+    projectID: current.projectID,
+    type: "profile_update",
+    detail: {
+      from: current.profile,
+      to: input.profile,
+      clearLock: clear,
+      lenses: input.learningLenses,
+    },
+  })
+  return after
 }

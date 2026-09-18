@@ -705,17 +705,26 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     seededAutonomy = true
     const hearing = ConfigAutonomy.hearingFirst(cfg.autonomy) && !args.neverAsk && !args.spauto
     if (!hearing) local.neverAsk.set(true)
-    if (ConfigAutonomy.enabled(cfg) || args.autonomy || args.spauto) local.skipPermissions.set(true)
+    if (ConfigAutonomy.enabled(cfg) || args.autonomy || args.spauto) {
+      // SE/FDE: safe_auto rules, not blanket skip. Super Auto / --spauto still skip-all.
+      if (args.spauto || !ConfigAutonomy.hearingFirst(cfg.autonomy)) {
+        local.skipPermissions.set(true)
+      }
+    }
   })
 
   // When hearing completes (Requirements Lock), enable never-ask for non-stop delivery.
+  // Keep safe_auto (no blanket skipPermissions) unless Super Auto.
   createEffect(() => {
     if (!connected()) return
     if (route.data.type !== "session") return
     const phase = sync.data.session_goal[route.data.sessionID]?.phase
     if (phase !== "execute") return
     if (!local.neverAsk.current()) local.neverAsk.set(true)
-    if (!local.skipPermissions.current()) local.skipPermissions.set(true)
+    const cfg = sync.data.config
+    if (!ConfigAutonomy.hearingFirst(cfg.autonomy) && !local.skipPermissions.current()) {
+      local.skipPermissions.set(true)
+    }
   })
 
   command.register(() => [

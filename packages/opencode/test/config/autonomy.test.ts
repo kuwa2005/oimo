@@ -79,18 +79,24 @@ describe("ConfigAutonomy helpers", () => {
 
   test("mode maps enabled + hearing_first + persona", () => {
     expect(ConfigAutonomy.mode({})).toBe("none")
-    expect(ConfigAutonomy.mode({ autonomy: { enabled: true } })).toBe("normal")
-    expect(ConfigAutonomy.mode({ autonomy: { enabled: true, hearing_first: true } })).toBe("normal")
+    expect(ConfigAutonomy.mode({ autonomy: { enabled: true } })).toBe("se")
+    expect(ConfigAutonomy.mode({ autonomy: { enabled: true, hearing_first: true } })).toBe("se")
     expect(ConfigAutonomy.mode({ autonomy: { enabled: true, hearing_first: true, persona: "fde" } })).toBe("fde")
     expect(ConfigAutonomy.mode({ autonomy: { enabled: true, hearing_first: false } })).toBe("special")
-    expect(ConfigAutonomy.mode({ experimental: { auto_continue: true } })).toBe("normal")
+    expect(ConfigAutonomy.mode({ experimental: { auto_continue: true } })).toBe("se")
   })
 
   test("patchForMode and isMode", () => {
     expect(ConfigAutonomy.isMode("none")).toBe(true)
+    expect(ConfigAutonomy.isMode("se")).toBe(true)
+    expect(ConfigAutonomy.isMode("normal")).toBe(true)
     expect(ConfigAutonomy.isMode("fde")).toBe(true)
     expect(ConfigAutonomy.isMode("weird")).toBe(false)
+    expect(ConfigAutonomy.canonicalMode("normal")).toBe("se")
     expect(ConfigAutonomy.patchForMode("none")).toEqual({ autonomy: { enabled: false } })
+    expect(ConfigAutonomy.patchForMode("se")).toEqual({
+      autonomy: { enabled: true, hearing_first: true, persona: "se" },
+    })
     expect(ConfigAutonomy.patchForMode("normal")).toEqual({
       autonomy: { enabled: true, hearing_first: true, persona: "se" },
     })

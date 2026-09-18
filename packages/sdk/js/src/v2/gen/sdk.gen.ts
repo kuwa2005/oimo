@@ -1489,13 +1489,15 @@ export class Config2 extends HeyApiClient {
   /**
    * Set autonomy mode
    *
-   * Switch none/normal/fde/special without disposing the instance so in-flight session goals survive. Special enables never-ask, skip-permissions, and promotes goals to execute.
+   * Default scope=session: bind mode to the session AutonomyRun without process.env or global config writes. scope=default: persist global default. Special enables never-ask and full_auto skip-permissions.
    */
   public autonomyMode<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
-      mode?: "none" | "normal" | "fde" | "special"
+      mode?: "none" | "se" | "normal" | "fde" | "special"
+      scope?: "session" | "default"
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1507,6 +1509,8 @@ export class Config2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "mode" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "sessionID" },
           ],
         },
       ],

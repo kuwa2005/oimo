@@ -134,6 +134,15 @@ export type SessionGoal = {
   autonomous?: boolean
   phase?: "hearing" | "execute"
   stopReason?: string
+  autonomy?: {
+    runID: string
+    profile: string
+    phase: string
+    stopReason?: string
+    gateID?: string
+    testAttempts: number
+    maxTestAttempts?: number
+  }
   verdicts: { [messageID: string]: GoalVerdict }
   lastMessageID?: string
 }
@@ -655,7 +664,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }
               lastMessageID = v.messageID
             }
-            const g = event.properties.goal
+            const g = event.properties.goal as SessionGoal | undefined
             return {
               condition: g?.condition,
               react: g?.react ?? prev?.react,
@@ -666,6 +675,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               maxCostUsd: g?.maxCostUsd ?? prev?.maxCostUsd,
               autonomous: g?.autonomous ?? prev?.autonomous,
               phase: g?.phase ?? prev?.phase,
+              autonomy: g?.autonomy ?? (g ? undefined : prev?.autonomy),
               stopReason: event.properties.stopReason ?? (g ? undefined : prev?.stopReason),
               verdicts,
               lastMessageID,

@@ -159,10 +159,10 @@ export function resolveAutonomyRequest(input: AutonomyResolveInput): AutonomyRes
   }
 }
 
-/** Temporary bridge until Mode is deleted. */
-export function legacyModeFromProfile(profile: AutonomyProfile): "none" | "normal" | "special" | "fde" {
+/** Temporary bridge until Mode is fully se/fde/super_auto. Returns canonical modes (se not normal). */
+export function legacyModeFromProfile(profile: AutonomyProfile): "none" | "se" | "special" | "fde" {
   if (profile === "off") return "none"
   if (profile === "super_auto") return "special"
   if (profile === "fde") return "fde"
-  return "normal"
+  return "se"
 }

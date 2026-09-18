@@ -2,8 +2,10 @@ import z from "zod"
 import { Effect } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
-import * as ConfigAutonomy from "@/config/autonomy"
-import { goalRef } from "../session/goal-ref"
+import { Instance } from "@/project/instance"
+import * as AutonomyGate from "@/autonomy/gate"
+import { AutonomyBridge } from "@/autonomy/bridge"
+import { resolveAutonomyRequest } from "@/autonomy/resolve"
 import DESCRIPTION from "./question.txt"
 
 const parameters = z.object({
@@ -25,10 +27,6 @@ export const QuestionTool = Tool.define<typeof parameters, Metadata, Question.Se
       parameters,
       execute: (params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
-          // never-ask mode: the tool stays visible so the model keeps routing
-          // every decision through it, but instead of blocking for a human we
-          // hand the decision back to the model — it knows which option fits
-          // headless execution better than a hardcoded pick would.
           if (yield* question.neverAsk()) {
             const autoAnswer = "[Never-Ask] The model will decide autonomously"
             return {
@@ -57,16 +55,49 @@ export const QuestionTool = Tool.define<typeof parameters, Metadata, Question.Se
             .map((q, i) => `"${q.question}"="${answers[i]?.length ? answers[i].join(", ") : "Unanswered"}"`)
             .join(", ")
 
-          // Autonomy lock gate (Requirements Lock / Solution Lock): advance hearing → execute.
-          const lockAsked = params.questions.some((q) => ConfigAutonomy.isAutonomyLockHeader(q.header))
-          const locked = lockAsked && ConfigAutonomy.isLockApproval(answers)
-          if (locked) {
-            goalRef.setPhase(ctx.sessionID, "execute")
+          let locked = false
+          let solutionLock = false
+          // Prefer durable AutonomyRun; Flag is bootstrap-only for pre-Run sessions.
+          const { getLatestRunForSession } = yield* Effect.promise(() => import("@/autonomy/run"))
+          const existingRun = getLatestRunForSession(ctx.sessionID)
+          const autonomyOn =
+            Boolean(existingRun && existingRun.profile !== "off" && existingRun.phase !== "cancelled") ||
+            Boolean(process.env.MIMOCODE_AUTONOMY) ||
+            Boolean(process.env.MIMOCODE_FDE) ||
+            Boolean(process.env.MIMOCODE_SPAUTO) ||
+            Boolean(process.env.MIMOCODE_AUTOSP)
+          if (autonomyOn) {
+            const resolved = resolveAutonomyRequest({
+              source: "tui",
+              env: {
+                MIMOCODE_AUTONOMY: process.env.MIMOCODE_AUTONOMY,
+                MIMOCODE_FDE: process.env.MIMOCODE_FDE,
+                MIMOCODE_SPAUTO: process.env.MIMOCODE_SPAUTO ?? process.env.MIMOCODE_AUTOSP,
+              },
+            })
+            const lock = AutonomyGate.handleQuestionLock({
+              sessionID: ctx.sessionID,
+              projectID: String(Instance.project.id),
+              questionRequestID: ctx.callID ?? ctx.messageID,
+              questions: params.questions,
+              answers,
+              profile:
+                existingRun?.profile && existingRun.profile !== "off"
+                  ? existingRun.profile
+                  : resolved.request.profile === "off"
+                    ? "se"
+                    : resolved.request.profile,
+              learningLenses:
+                existingRun?.learningLenses?.length
+                  ? existingRun.learningLenses
+                  : resolved.request.learningLenses.length > 0
+                    ? resolved.request.learningLenses
+                    : ["se"],
+            })
+            locked = lock.locked
+            solutionLock = lock.kind === "solution_lock"
+            if (locked) AutonomyBridge.notifyLockApproved(ctx.sessionID)
           }
-
-          const solutionLock = params.questions.some((q) =>
-            q.header ? /solution\s*lock|解決策ロック|ソリューションロック|方針確定/i.test(q.header) : false,
-          )
 
           return {
             title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,

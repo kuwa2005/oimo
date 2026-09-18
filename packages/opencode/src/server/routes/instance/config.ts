@@ -6,12 +6,18 @@ import { Provider } from "@/provider"
 import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Goal } from "@/session/goal"
+import { Instance } from "@/project/instance"
+import { applySessionMode } from "@/autonomy/session-mode"
+import { SessionID } from "@/session/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { jsonRequest } from "./trace"
 
 const AutonomyModeBody = z.object({
-  mode: z.enum(["none", "normal", "fde", "special"]),
+  mode: z.enum(["none", "se", "normal", "fde", "special"]),
+  /** session = current session Run only (default). default = persist global oimo.json. */
+  scope: z.enum(["session", "default"]).optional().default("session"),
+  sessionID: SessionID.zod.optional(),
 })
 
 export const ConfigRoutes = lazy(() =>
@@ -71,7 +77,7 @@ export const ConfigRoutes = lazy(() =>
       describeRoute({
         summary: "Set autonomy mode",
         description:
-          "Switch none/normal/fde/special without disposing the instance so in-flight session goals survive. Special enables never-ask, skip-permissions, and promotes goals to execute.",
+          "Default scope=session: bind mode to the session AutonomyRun without process.env or global config writes. scope=default: persist global default. Special enables never-ask and full_auto skip-permissions.",
         operationId: "config.autonomyMode",
         responses: {
           200: {
@@ -81,8 +87,11 @@ export const ConfigRoutes = lazy(() =>
                 schema: resolver(
                   z.object({
                     config: Config.Info,
-                    mode: z.enum(["none", "normal", "fde", "special"]),
+                    mode: z.enum(["none", "se", "normal", "fde", "special"]),
                     goalsPromoted: z.number(),
+                    reLockRequired: z.boolean(),
+                    scope: z.enum(["session", "default"]),
+                    runID: z.string().optional(),
                   }),
                 ),
               },
@@ -94,9 +103,25 @@ export const ConfigRoutes = lazy(() =>
       validator("json", AutonomyModeBody),
       async (c) =>
         jsonRequest("ConfigRoutes.autonomyMode", c, function* () {
-          const mode = c.req.valid("json").mode
+          const body = c.req.valid("json")
+          const mode = body.mode
+          const scope = body.scope ?? "session"
+          const sessionID = body.sessionID
+
+          if (scope === "session" && !sessionID) {
+            throw new Error("sessionID required when scope=session")
+          }
+
+          const applied = applySessionMode({
+            mode,
+            scope,
+            sessionID,
+            projectID: String(Instance.project.id),
+          })
+
           const cfg = yield* Config.Service
-          const config = yield* cfg.setAutonomyMode(mode)
+          // In-memory overlay so prompts see the mode; global write only for scope=default.
+          const config = yield* cfg.setAutonomyMode(mode, { persistGlobal: applied.persistGlobal })
 
           const question = yield* Question.Service
           const permission = yield* Permission.Service
@@ -104,9 +129,10 @@ export const ConfigRoutes = lazy(() =>
             yield* question.setNeverAsk(false)
             yield* permission.setSkipAll(false)
           }
-          if (mode === "normal" || mode === "fde") {
+          if (mode === "se" || mode === "normal" || mode === "fde") {
+            // safe_auto: do not skipAll — permission rules from safe_auto preset apply.
             yield* question.setNeverAsk(false)
-            yield* permission.setSkipAll(true)
+            yield* permission.setSkipAll(false)
           }
           let goalsPromoted = 0
           if (mode === "special") {
@@ -116,7 +142,14 @@ export const ConfigRoutes = lazy(() =>
             goalsPromoted = yield* goal.enterSpecialAll()
           }
 
-          return { config, mode, goalsPromoted }
+          return {
+            config,
+            mode,
+            goalsPromoted,
+            reLockRequired: applied.reLockRequired,
+            scope,
+            runID: applied.run?.id,
+          }
         }),
     )
     .get(
