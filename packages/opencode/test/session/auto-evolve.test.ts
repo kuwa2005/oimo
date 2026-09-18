@@ -11,15 +11,20 @@ import {
 } from "../../src/session/auto-evolve"
 import type { Config } from "../../src/config"
 
-describe("evolve track flags (opt-out)", () => {
-  test("all tracks default to enabled when unset", () => {
+describe("evolve track flags (opt-in auto)", () => {
+  test("auto defaults to disabled when unset (complete-spec opt-in)", () => {
     const cfg = {} as Config.Info
-    expect(evolveAutoEnabled(cfg)).toBe(true)
+    expect(evolveAutoEnabled(cfg)).toBe(false)
     expect(evolveSkillsEnabled(cfg)).toBe(true)
     expect(evolveBriefsEnabled(cfg)).toBe(true)
     expect(evolveFrictionEnabled(cfg)).toBe(true)
     expect(evolveBacklogEnabled(cfg)).toBe(true)
     expect(evolveSessionReviewEnabled(cfg)).toBe(true)
+  })
+
+  test("explicit evolve.auto true enables", () => {
+    const cfg = { evolve: { auto: true } } as Config.Info
+    expect(evolveAutoEnabled(cfg)).toBe(true)
   })
 
   test("explicit false disables each track", () => {

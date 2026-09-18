@@ -1,50 +1,51 @@
 import { Effect } from "effect"
 import { isMemoryWriteEnabled } from "@/memory/write-gate"
-import { Database, eq, desc, asc, isNull } from "@/storage"
+import { Database, eq, desc, asc, isNull, and } from "@/storage"
 import { SessionTable } from "./session.sql"
 import { Log } from "@/util"
 import type { Config } from "@/config"
 import { InstanceState } from "@/effect"
 import { evaluateConditionTriggers } from "@/evolve/triggers"
+import * as EvolutionScheduler from "@/evolve/scheduler"
+import { assertRawTrajectoryConsent, isEvolutionPaused, loadConsent } from "@/evolve/retention"
 
 const log = Log.create({ service: "auto-evolve" })
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_EVOLVE_INTERVAL_DAYS = 14
-const MIN_SPAWN_GAP_MS = 10_000
 const MIN_CONDITION_GAP_MS = 60 * 60 * 1000
 
 export const AUTO_EVOLVE_TITLE = "Auto Evolve"
 
-let lastEvolveSpawnTime = 0
-
-function optOutEnabled(value: boolean | undefined): boolean {
-  return value !== false
-}
-
-/** Self-evolution logs under ~/.oimo/evolve — default ON (opt-out via evolve.auto: false). */
+/** Complete-spec default: opt-in. Explicit `evolve.auto: true` enables. */
 export function evolveAutoEnabled(cfg: Config.Info): boolean {
-  return optOutEnabled(cfg.evolve?.auto)
+  if (isEvolutionPaused(cfg)) return false
+  if (cfg.evolution?.enabled === false) return false
+  if (cfg.evolution?.soft?.auto_generate === true || cfg.evolution?.hard?.auto_generate_briefs === true) {
+    return true
+  }
+  return cfg.evolve?.auto === true
 }
 
 export function evolveSkillsEnabled(cfg: Config.Info): boolean {
-  return optOutEnabled(cfg.evolve?.skills?.enabled)
+  return cfg.evolve?.skills?.enabled !== false
 }
 
 export function evolveBriefsEnabled(cfg: Config.Info): boolean {
-  return optOutEnabled(cfg.evolve?.briefs?.enabled)
+  if (cfg.evolution?.hard?.auto_generate_briefs === false) return false
+  return cfg.evolve?.briefs?.enabled !== false
 }
 
 export function evolveFrictionEnabled(cfg: Config.Info): boolean {
-  return optOutEnabled(cfg.evolve?.friction?.enabled)
+  return cfg.evolve?.friction?.enabled !== false
 }
 
 export function evolveBacklogEnabled(cfg: Config.Info): boolean {
-  return optOutEnabled(cfg.evolve?.backlog?.enabled)
+  return cfg.evolve?.backlog?.enabled !== false
 }
 
 export function evolveSessionReviewEnabled(cfg: Config.Info): boolean {
-  return optOutEnabled(cfg.evolve?.session_review?.enabled)
+  return cfg.evolve?.session_review?.enabled !== false
 }
 
 export function buildEvolveTask(input: {
@@ -72,16 +73,18 @@ export function buildEvolveTask(input: {
     "write proposals for the user to review and hand to an external coding agent.",
     "",
     "Start with the `evolve_status` tool: snapshot (before writes), metrics, then dashboard.",
-    "Use evolve_status scenarios / scenario_prompt / scenario_score for friction regressions.",
+    "Use evolve_status scenarios / scenario_prompt / scenario_observe for friction regressions (DB traces, not self-report).",
     "Use evolve_status gate to combine friction + scenario results before recommending adopt.",
-    "After briefs: suggest workflow evolve-review, then (only with explicit user approval) evolve-apply { approved: true }.",
+    "Use evolve_status handoffs to list pending hard briefs for human / external-agent delivery.",
+    "After briefs: suggest workflow evolve-review, then (only with explicit user approval) evolve-apply { approved: true, brief_hash }.",
     "",
     "Tracks for this run:",
     ...tracks.map((t) => `- ${t}`),
     "",
-    "Use the memory files as the working index and the raw oimo trajectory database as the source of truth.",
+    "Use the memory files as the working index and the redacted Evidence API / trajectory as sources.",
+    "Never copy secrets, tokens, or credentials into briefs or skills.",
     "Inventory existing project `.oimo/skills` and `~/.oimo/evolve/<projectID>/` assets first; prefer extend over duplicate.",
-    "Write skills under `<worktree>/.oimo/skills/`.",
+    "Write skills under `<worktree>/.oimo/skills-staging/` then activate after validation.",
     "Write self-evolution logs under `~/.oimo/evolve/<projectID>/`:",
     "  briefs/, friction/, backlog/BACKLOG.md, reviews/, INDEX.md, history/HISTORY.md, scenarios/, snapshots/.",
     "Quantify bottlenecks (tool churn, re-reads, corrections, Human Attention Cost) before proposing.",
@@ -111,18 +114,38 @@ function shouldAutoRun(input: {
   intervalDays: number
   title: string
   label: string
+  projectID: string
 }) {
   return Effect.gen(function* () {
     if (!input.enabled) return false
 
     const intervalMs = input.intervalDays * DAY_MS
 
+    // Prefer durable project-scoped scheduler (complete-spec §12)
+    const dueSched = EvolutionScheduler.isDue({
+      projectID: input.projectID,
+      track: "evolve",
+      intervalMs,
+    })
+    if (!dueSched.due && dueSched.reason === "lease_held") {
+      log.info(`auto-${input.label} skipped — lease held`, { projectID: input.projectID })
+      return false
+    }
+    if (!dueSched.due && dueSched.reason === "cooldown") {
+      log.info(`auto-${input.label} skipped — scheduler cooldown`, {
+        projectID: input.projectID,
+        lastRunAgo: dueSched.lastRunMs ? Math.round((Date.now() - dueSched.lastRunMs) / DAY_MS) + "d" : "?",
+      })
+      return false
+    }
+
+    // Project-scoped session title lookup (never cross-project)
     const lastRun = yield* Effect.sync(() =>
       Database.use((db) =>
         db
           .select({ time_created: SessionTable.time_created })
           .from(SessionTable)
-          .where(eq(SessionTable.title, input.title))
+          .where(and(eq(SessionTable.title, input.title), eq(SessionTable.project_id, input.projectID as never)))
           .orderBy(desc(SessionTable.time_created))
           .limit(1)
           .get(),
@@ -132,13 +155,13 @@ function shouldAutoRun(input: {
     const now = Date.now()
     const elapsed = lastRun ? now - lastRun.time_created : Infinity
 
-    if (!lastRun) {
+    if (!lastRun && dueSched.lastRunMs == null) {
       const earliest = yield* Effect.sync(() =>
         Database.use((db) =>
           db
             .select({ time_created: SessionTable.time_created })
             .from(SessionTable)
-            .where(isNull(SessionTable.parent_id))
+            .where(and(isNull(SessionTable.parent_id), eq(SessionTable.project_id, input.projectID as never)))
             .orderBy(asc(SessionTable.time_created))
             .limit(1)
             .get(),
@@ -146,6 +169,7 @@ function shouldAutoRun(input: {
       )
       if (!earliest || now - earliest.time_created < intervalMs) {
         log.info(`auto-${input.label} skipped — project too young`, {
+          projectID: input.projectID,
           projectAge: earliest ? Math.round((now - earliest.time_created) / DAY_MS) + "d" : "empty",
           interval: input.intervalDays + "d",
         })
@@ -153,8 +177,9 @@ function shouldAutoRun(input: {
       }
     }
 
-    if (elapsed < intervalMs) {
+    if (elapsed < intervalMs && dueSched.lastRunMs == null) {
       log.info(`auto-${input.label} skipped — last run too recent`, {
+        projectID: input.projectID,
         lastRunAgo: Math.round(elapsed / DAY_MS) + "d",
         interval: input.intervalDays + "d",
       })
@@ -162,6 +187,7 @@ function shouldAutoRun(input: {
     }
 
     log.info(`auto-${input.label} triggering`, {
+      projectID: input.projectID,
       lastRun: lastRun ? new Date(lastRun.time_created).toISOString() : "never",
       interval: input.intervalDays + "d",
     })
@@ -174,32 +200,55 @@ export function shouldAutoEvolve(cfg: Config.Info) {
     if (!isMemoryWriteEnabled(cfg)) return false
     if (!evolveAutoEnabled(cfg)) return false
 
-    const now = Date.now()
-    if (now - lastEvolveSpawnTime < MIN_SPAWN_GAP_MS) return false
+    const ctx = yield* InstanceState.context
+    const projectID = String(ctx.project.id)
+    const consent = yield* Effect.promise(() => loadConsent(projectID))
+    const consentOk = assertRawTrajectoryConsent(consent, "automatic")
+    if (!consentOk.ok) {
+      log.info("auto-evolve skipped — missing raw trajectory consent", { projectID })
+      return false
+    }
 
     const intervalDays = cfg.evolve?.interval_days ?? DEFAULT_EVOLVE_INTERVAL_DAYS
+
+    const lease = EvolutionScheduler.tryAcquireLease({
+      projectID,
+      track: "evolve",
+      ttlMs: MIN_CONDITION_GAP_MS,
+    })
+    if (!lease.ok) return false
+
     const due = yield* shouldAutoRun({
       enabled: true,
       intervalDays,
       title: AUTO_EVOLVE_TITLE,
       label: "evolve",
+      projectID,
     })
     if (due) {
-      lastEvolveSpawnTime = now
+      EvolutionScheduler.recordRun(projectID, "evolve")
       return true
     }
 
-    if (now - lastEvolveSpawnTime < MIN_CONDITION_GAP_MS) return false
-    if (cfg.evolve?.condition_triggers === false) return false
+    if (cfg.evolve?.condition_triggers === false) {
+      EvolutionScheduler.releaseLease(projectID, "evolve", lease.owner)
+      return false
+    }
 
-    const ctx = yield* InstanceState.context
-    const decision = yield* Effect.sync(() =>
-      evaluateConditionTriggers({ projectID: ctx.project.id, windowDays: 7 }),
-    )
-    if (!decision.fire) return false
+    const last = EvolutionScheduler.getSchedulerRow(projectID, "evolve")
+    if (last?.last_run_ms && Date.now() - last.last_run_ms < MIN_CONDITION_GAP_MS) {
+      EvolutionScheduler.releaseLease(projectID, "evolve", lease.owner)
+      return false
+    }
 
-    log.info("auto-evolve triggering — condition", { reasons: decision.reasons })
-    lastEvolveSpawnTime = now
+    const decision = yield* Effect.sync(() => evaluateConditionTriggers({ projectID: ctx.project.id, windowDays: 7 }))
+    if (!decision.fire) {
+      EvolutionScheduler.releaseLease(projectID, "evolve", lease.owner)
+      return false
+    }
+
+    log.info("auto-evolve triggering — condition", { projectID, reasons: decision.reasons })
+    EvolutionScheduler.recordRun(projectID, "evolve")
     return true
   })
 }

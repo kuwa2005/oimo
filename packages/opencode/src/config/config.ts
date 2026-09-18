@@ -421,7 +421,7 @@ const InfoSchema = Schema.Struct({
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({
         description:
-          "Auto-trigger Self Improvement Session (evolve) on new session start and write logs under ~/.oimo/evolve/<projectID>/. Default: true (opt-out with false).",
+          "Auto-trigger Self Improvement Session (evolve) on new session start. Default: false (opt-in). Legacy installs that relied on opt-out should set evolve.auto: true explicitly.",
       }),
       interval_days: Schema.optional(NonNegativeInt).annotate({
         description: "Minimum days between automatic evolve runs. Default: 14.",
@@ -468,8 +468,54 @@ const InfoSchema = Schema.Struct({
       ),
       condition_triggers: Schema.optional(Schema.Boolean).annotate({
         description:
-          "Allow auto-evolve to fire early when HAC/corrections/tool-churn thresholds are hit (requires evolve.auto, which defaults to true). Default: true.",
+          "Allow auto-evolve to fire early when HAC/corrections/tool-churn thresholds are hit (requires evolve.auto: true). Default: true when auto is enabled.",
       }),
+    }),
+  ),
+  evolution: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Master switch for Continuous Self-Evolution features. Default: true when unset.",
+      }),
+      consent_version: Schema.optional(NonNegativeInt).annotate({
+        description: "Consent schema version the user accepted. Bump to re-prompt.",
+      }),
+      retention_days: Schema.optional(NonNegativeInt).annotate({
+        description: "Days to retain Evolution evidence metadata. Default: 90.",
+      }),
+      paused: Schema.optional(Schema.Boolean).annotate({
+        description: "Pause all automatic Continuous Self-Evolution runs. Default: false.",
+      }),
+      soft: Schema.optional(
+        Schema.Struct({
+          auto_generate: Schema.optional(Schema.Boolean).annotate({
+            description: "Auto-generate soft-evolution artifacts. Default: false (opt-in).",
+          }),
+          auto_activate: Schema.optional(Schema.Boolean).annotate({
+            description: "Auto-activate soft artifacts after validation. Default: false.",
+          }),
+        }),
+      ),
+      hard: Schema.optional(
+        Schema.Struct({
+          auto_generate_briefs: Schema.optional(Schema.Boolean).annotate({
+            description: "Auto-generate hard-evolution briefs. Default: false (opt-in).",
+          }),
+          allow_product_apply: Schema.optional(Schema.Boolean).annotate({
+            description: "Allow evolve-apply product delivery workflow. Default: false.",
+          }),
+        }),
+      ),
+      privacy: Schema.optional(
+        Schema.Struct({
+          redact_secrets: Schema.optional(Schema.Boolean).annotate({
+            description: "Redact secrets from Evidence and briefs. Default: true.",
+          }),
+          include_raw_user_text: Schema.optional(Schema.Boolean).annotate({
+            description: "Allow raw user text in Evidence excerpts. Default: false.",
+          }),
+        }),
+      ),
     }),
   ),
   voice: Schema.optional(

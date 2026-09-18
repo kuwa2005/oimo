@@ -6,11 +6,15 @@ Operations:
 - snapshot / list_snapshots / rollback: checkpoint project `.oimo/{skills,tools,...}` under ~/.oimo/evolve/<projectID>/snapshots/
 - scenarios: list built-in + project fixtures under ~/.oimo/evolve/<projectID>/scenarios/*.json
 - scenario_prompt: return the runnable prompt for scenario_id
-- scenario_score: score an observation JSON against scenario budgets
+- scenario_observe: build ScenarioObservation from SQLite trajectory and score against scenario_id (preferred over self-report)
+- scenario_score: score a provided observation JSON against scenario budgets (fallback)
+- handoffs: list pending hard-evolution briefs for human / external-agent handoff
+- consent: read or record raw_trajectory_opt_in consent for automatic analysis
+- delete_artifacts: wipe ~/.oimo/evolve/<projectID>/ when confirm_delete=true
 - evaluate: coarse friction window compare
 - gate: combine friction compare + optional scenario_score into one adopt/reject signal
 
 Prefer this tool over ad-hoc SQLite when running /evolve or /self-improve.
 After writing a product brief:
 1. workflow evolve-review with args.brief
-2. If approved by the user, workflow evolve-apply with args.brief and args.approved=true
+2. If approved by the user, workflow evolve-apply with args.brief, args.approved=true, and args.brief_hash matching content

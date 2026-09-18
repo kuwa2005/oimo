@@ -13,6 +13,13 @@ import {
   scoreObservation,
 } from "@/evolve/scenarios"
 import type { ScenarioObservation } from "@/evolve/scenario"
+import { observeFromDatabase } from "@/evolve/observe-trace"
+import { formatPendingHandoffs, listPendingHandoffs } from "@/evolve/handoff"
+import {
+  deleteProjectEvolution,
+  loadConsent,
+  recordConsent,
+} from "@/evolve/retention"
 import DESCRIPTION from "./evolve.txt"
 import * as Tool from "./tool"
 
@@ -28,6 +35,10 @@ const parameters = z.object({
       "scenarios",
       "scenario_prompt",
       "scenario_score",
+      "scenario_observe",
+      "handoffs",
+      "consent",
+      "delete_artifacts",
       "gate",
     ])
     .describe("Evolve tooling operation"),
@@ -36,7 +47,10 @@ const parameters = z.object({
   after_days: z.number().optional().describe("evaluate: recent window size"),
   label: z.string().optional().describe("snapshot label suffix"),
   snapshot_id: z.string().optional().describe("rollback: snapshot id"),
-  scenario_id: z.string().optional().describe("scenario_prompt / scenario_score / gate"),
+  scenario_id: z.string().optional().describe("scenario_prompt / scenario_score / gate / scenario_observe"),
+  session_id: z.string().optional().describe("scenario_observe: restrict to one session"),
+  raw_trajectory_opt_in: z.boolean().optional().describe("consent: allow automatic raw trajectory analysis"),
+  confirm_delete: z.boolean().optional().describe("delete_artifacts: must be true to wipe project evolve root"),
   observation: z
     .object({
       userClarifications: z.number(),
@@ -47,7 +61,7 @@ const parameters = z.object({
       askedUserFor: z.array(z.string()),
     })
     .optional()
-    .describe("scenario_score / gate: observed behavior to score against budgets"),
+    .describe("scenario_score / gate: observed behavior (prefer scenario_observe from DB)"),
 })
 
 export const EvolveTool = Tool.define(
@@ -163,7 +177,8 @@ export const EvolveTool = Tool.define(
           if (!args.scenario_id || !args.observation) {
             return {
               title: "scenario_score: missing args",
-              output: "Requires scenario_id and observation { userClarifications, toolCalls, ... }",
+              output:
+                "Requires scenario_id and observation. Prefer operation=scenario_observe to build observation from DB traces.",
               metadata: { operation: "scenario_score" },
             }
           }
@@ -188,6 +203,103 @@ export const EvolveTool = Tool.define(
               "```",
             ].join("\n"),
             metadata: { operation: "scenario_score", pass: score.pass, id: score.id },
+          }
+        }
+
+        if (args.operation === "scenario_observe") {
+          if (!args.scenario_id) {
+            return {
+              title: "scenario_observe: missing scenario_id",
+              output: "Pass scenario_id; observation is computed from SQLite traces (not self-report).",
+              metadata: { operation: "scenario_observe" },
+            }
+          }
+          const fixtures = yield* Effect.promise(() => listScenarios(projectID))
+          const fixture = getScenario(fixtures, args.scenario_id)
+          if (!fixture) {
+            return {
+              title: "scenario not found",
+              output: `Unknown scenario_id: ${args.scenario_id}`,
+              metadata: { operation: "scenario_observe" },
+            }
+          }
+          const windowDays = args.window_days ?? 14
+          const obs = observeFromDatabase({
+            projectID,
+            sessionID: args.session_id,
+            cutoffMs: Date.now() - windowDays * 86400000,
+          })
+          const score = scoreObservation(fixture, obs)
+          return {
+            title: score.pass ? `PASS ${score.id} (from DB)` : `FAIL ${score.id} (from DB)`,
+            output: [
+              "Observation source: SQLite trajectory (not model self-report)",
+              score.pass ? "PASS" : "FAIL",
+              ...score.failures.map((f) => `- ${f}`),
+              "",
+              "```json",
+              JSON.stringify({ observation: obs, score }, null, 2),
+              "```",
+            ].join("\n"),
+            metadata: {
+              operation: "scenario_observe",
+              pass: score.pass,
+              id: score.id,
+              source: "database",
+            },
+          }
+        }
+
+        if (args.operation === "handoffs") {
+          const items = yield* Effect.promise(() => listPendingHandoffs(projectID))
+          return {
+            title: `Handoffs: ${items.length}`,
+            output: formatPendingHandoffs(items),
+            metadata: { operation: "handoffs", count: items.length },
+          }
+        }
+
+        if (args.operation === "consent") {
+          if (args.raw_trajectory_opt_in === undefined) {
+            const existing = yield* Effect.promise(() => loadConsent(projectID))
+            return {
+              title: "Consent status",
+              output: existing
+                ? JSON.stringify(existing, null, 2)
+                : "No consent recorded. Pass raw_trajectory_opt_in=true|false to record.",
+              metadata: { operation: "consent", recorded: Boolean(existing) },
+            }
+          }
+          const saved = yield* Effect.promise(() =>
+            recordConsent(projectID, {
+              version: 1,
+              rawTrajectoryOptIn: args.raw_trajectory_opt_in === true,
+              autoDream: false,
+              autoDistill: false,
+              autoSoftGenerate: false,
+              autoHardBrief: false,
+            }),
+          )
+          return {
+            title: "Consent recorded",
+            output: JSON.stringify(saved, null, 2),
+            metadata: { operation: "consent", recorded: true },
+          }
+        }
+
+        if (args.operation === "delete_artifacts") {
+          if (args.confirm_delete !== true) {
+            return {
+              title: "delete_artifacts: refused",
+              output: "Pass confirm_delete=true to wipe ~/.oimo/evolve/<projectID>/",
+              metadata: { operation: "delete_artifacts", deleted: false },
+            }
+          }
+          const wiped = yield* Effect.promise(() => deleteProjectEvolution(projectID))
+          return {
+            title: "Evolution artifacts deleted",
+            output: `Removed ${wiped.root}`,
+            metadata: { operation: "delete_artifacts", deleted: true, root: wiped.root },
           }
         }
 

@@ -355,22 +355,26 @@ export PULSE_SERVER=tcp:127.0.0.1:4713
 案件で使う
   → /evolve（Self Improvement Session）
   → 摩擦 / Human Attention Cost を定量化
-  → プロジェクト知識 → .oimo/skills/
-  → 製品改善 → ~/.oimo/evolve/<projectID>/briefs/（外部 Agent 向け）
-  → evolve-review → 人間承認 → evolve-apply（draft PR）
+  → プロジェクト知識 → .oimo/skills-staging/ → 検証後 .oimo/skills/
+  → 製品改善 → ~/.oimo/evolve/<projectID>/briefs/（外部 Agent 向け・本体は変更しない）
+  → evolve-review → 人間承認（brief_hash）→ evolve-apply（draft PR）
   → ゲート通過後にマージ → 次サイクル
 ```
 
 | コマンド / 道具 | 役割 |
 |----------------|------|
 | `/evolve` · `/self-improve` | 観測→分析→提案のフルパス |
-| `/evolve-status` | TUI ダッシュボード（briefs / backlog / snapshots） |
-| `evolve_status` tool | metrics · snapshot · rollback · scenarios · gate |
-| `evolve-review` / `evolve-apply` | 多視点レビュー / **承認付き** worktree→verify→draft PR |
+| `/evolve-status` | TUI ダッシュボード（briefs / backlog / handoffs / snapshots） |
+| `evolve_status` tool | metrics · snapshot · rollback · scenario_observe · gate · consent |
+| `evolve-review` / `evolve-apply` | 多視点レビュー / **承認+brief_hash 付き** worktree→verify→draft PR |
 
 自己進化ログはプロジェクトを汚さず **`~/.oimo/evolve/<projectID>/`** に集約されます（skills などホットリロード拡張だけが `<worktree>/.oimo/`）。製品ソースの自動パッチはしません — Human-in-the-loop が前提です。
 
+**Continuous Self-Evolution 完全版（formal scope）** は Linux (WSL2) で証跡済みです。ソフト進化は生成→検証→評価→採用/rollback、ハード進化は検証済み brief の人間引き渡しまで。詳細は [`docs/evolve/completion-evidence.md`](./docs/evolve/completion-evidence.md)。
+
 **これが Co-Evolve の実体です。** モデルとエージェントが一緒に良くなる、という README の標語を、閉じたループとして実装しています。
+
+設計原典は [`oimo進化指示書.md`](./oimo進化指示書.md)、安全・検証契約は [`docs/evolve/completion-instructions.md`](./docs/evolve/completion-instructions.md) を参照してください。
 
 ---
 

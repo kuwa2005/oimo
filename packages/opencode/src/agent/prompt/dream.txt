@@ -129,6 +129,24 @@ Edit the current project's `MEMORY.md` using these sections when useful:
 - `## Patterns` - repeated problems and solutions.
 - `## Gotchas` - easy-to-miss traps.
 
+**Provenance (required for new durable facts):** for each new fact you promote,
+also write a JSON sidecar under the project memory tree
+`entries/<id>.json` with:
+
+- `statement`, `scope` (`repository`|`workspace`|`project`|`user`)
+- `evidenceIDs` (at least one Evidence / session id — no speculation-as-fact)
+- `confidence` (0..1), `observedAt`, optional `freshnessDays`
+- `repositoryID` when `scope` is `repository`
+- `workspaceFingerprint` when `scope` is `workspace`
+
+Refuse volatile facts (HEAD tip, WIP, "today's assignee"). On conflicting
+statements, mark the older entry `disputed` rather than silently overwriting.
+Never put secrets/tokens in memory.
+
+Multi-repo: keep repository-scoped facts tagged with `repositoryID`. Do not
+apply repo-A knowledge as if it were repo-B. Workspace-wide facts go under
+workspace scope with a fingerprint, not into a single repo MEMORY.md alone.
+
 Principles:
 
 - Merge duplicates instead of appending.

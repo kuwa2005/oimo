@@ -5,6 +5,7 @@ import { useProject } from "@tui/context/project"
 import { For, Show, createResource, createMemo } from "solid-js"
 import { loadDashboard } from "@/evolve/store"
 import { listSnapshots } from "@/evolve/rollback"
+import { listPendingHandoffs } from "@/evolve/handoff"
 
 export function DialogEvolve() {
   const { theme } = useTheme()
@@ -23,6 +24,7 @@ export function DialogEvolve() {
     (key) => (key ? loadDashboard(key) : undefined),
   )
   const [snaps] = createResource(projectID, (id) => (id ? listSnapshots(id) : []))
+  const [handoffs] = createResource(projectID, (id) => (id ? listPendingHandoffs(id) : []))
 
   const rows = createMemo(() => {
     const d = dash()
@@ -32,6 +34,7 @@ export function DialogEvolve() {
       { k: "Skills", v: String(d.skillsCount) },
       { k: "Backlog open", v: String(d.backlogOpen) },
       { k: "Briefs", v: String(d.briefsOpen.length) },
+      { k: "Handoffs", v: String(handoffs()?.length ?? d.pendingHandoffs) },
       { k: "Friction reports", v: String(d.frictionReports.length) },
       { k: "Reviews", v: String(d.reviews.length) },
       { k: "Snapshots", v: String(snaps()?.length ?? 0) },
@@ -39,7 +42,7 @@ export function DialogEvolve() {
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1} maxHeight={24}>
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1} maxHeight={28}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Self Evolution
@@ -62,6 +65,18 @@ export function DialogEvolve() {
             </box>
           )}
         </For>
+        <Show when={(handoffs() ?? []).length > 0}>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            Pending handoffs (external agent)
+          </text>
+          <For each={(handoffs() ?? []).slice(0, 6)}>
+            {(h) => (
+              <text fg={theme.textMuted}>
+                {h.briefFile} — {h.title}
+              </text>
+            )}
+          </For>
+        </Show>
       </Show>
     </box>
   )

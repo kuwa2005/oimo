@@ -1,5 +1,7 @@
 import type { FrictionMetrics } from "./metrics"
 import type { ScenarioScore } from "./scenario"
+import { assertNonOverlappingWindows } from "./state"
+import type { EvaluationSnapshot } from "./evolution.sql"
 
 export type EvalVerdict = "pass" | "fail" | "inconclusive"
 
@@ -8,6 +10,8 @@ export type ReplayComparison = {
   after: Partial<FrictionMetrics>
   verdict: EvalVerdict
   notes: string[]
+  sampleSize?: { before: number; after: number }
+  normalized?: boolean
 }
 
 export type GateResult = {
@@ -17,45 +21,124 @@ export type GateResult = {
   notes: string[]
 }
 
-/** Compare two friction snapshots for evaluation-gate decisions. */
+function rate(n: number, denom: number) {
+  if (denom <= 0) return n
+  return n / denom
+}
+
+function round(n: number) {
+  return Number.isInteger(n) ? n : Math.round(n * 1000) / 1000
+}
+
+/**
+ * Compare friction using per-session / per-user-turn rates when possible.
+ * Absolute count drops from lower usage alone must not count as improvement.
+ */
 export function compareFriction(before: FrictionMetrics, after: FrictionMetrics): ReplayComparison {
   const notes: string[] = []
   let improved = 0
   let worsened = 0
 
-  const pairs: Array<[string, number, number, boolean]> = [
-    ["toolCalls", before.toolCalls, after.toolCalls, true],
-    ["correctionHints", before.correctionHints, after.correctionHints, true],
-    ["hacScore", before.humanAttentionCost.score, after.humanAttentionCost.score, true],
-    ["userTurns", before.userTurns, after.userTurns, true],
-  ]
+  const beforeDenom = Math.max(before.sessions, before.userTurns, 1)
+  const afterDenom = Math.max(after.sessions, after.userTurns, 1)
+  const normalized = before.sessions > 0 && after.sessions > 0
+
+  if (before.sessions >= 3 && after.sessions > 0 && after.sessions < before.sessions * 0.25) {
+    return {
+      before,
+      after,
+      verdict: "inconclusive",
+      notes: [
+        `sample size collapsed (${before.sessions} → ${after.sessions} sessions); do not treat usage drop as improvement`,
+      ],
+      sampleSize: { before: before.sessions, after: after.sessions },
+      normalized,
+    }
+  }
+
+  const pairs: Array<[string, number, number, boolean]> = normalized
+    ? [
+        ["toolCalls/session", rate(before.toolCalls, before.sessions), rate(after.toolCalls, after.sessions), true],
+        [
+          "correctionHints/userTurn",
+          rate(before.correctionHints, Math.max(before.userTurns, 1)),
+          rate(after.correctionHints, Math.max(after.userTurns, 1)),
+          true,
+        ],
+        ["hacScore", before.humanAttentionCost.score, after.humanAttentionCost.score, true],
+        [
+          "assistant/user turn ratio",
+          rate(before.assistantTurns, Math.max(before.userTurns, 1)),
+          rate(after.assistantTurns, Math.max(after.userTurns, 1)),
+          true,
+        ],
+      ]
+    : [
+        ["toolCalls", before.toolCalls, after.toolCalls, true],
+        ["correctionHints", before.correctionHints, after.correctionHints, true],
+        ["hacScore", before.humanAttentionCost.score, after.humanAttentionCost.score, true],
+        ["userTurns", before.userTurns, after.userTurns, true],
+      ]
 
   for (const [label, a, b, lowerBetter] of pairs) {
     if (a === 0 && b === 0) continue
     const delta = b - a
-    if (delta === 0) {
-      notes.push(`${label}: unchanged (${a})`)
+    if (Math.abs(delta) < 1e-9) {
+      notes.push(`${label}: unchanged (${round(a)})`)
       continue
     }
     const better = lowerBetter ? delta < 0 : delta > 0
     if (better) {
       improved++
-      notes.push(`${label}: ${a} → ${b} (improved)`)
+      notes.push(`${label}: ${round(a)} → ${round(b)} (improved)`)
       continue
     }
     worsened++
-    notes.push(`${label}: ${a} → ${b} (worsened)`)
+    notes.push(`${label}: ${round(a)} → ${round(b)} (worsened)`)
   }
 
   const verdict: EvalVerdict =
     improved > 0 && worsened === 0 ? "pass" : worsened > improved ? "fail" : "inconclusive"
 
-  return { before, after, verdict, notes }
+  return {
+    before,
+    after,
+    verdict,
+    notes,
+    sampleSize: { before: beforeDenom, after: afterDenom },
+    normalized,
+  }
+}
+
+/** Require non-overlapping windows before comparing. */
+export function compareFrictionWindows(input: {
+  before: FrictionMetrics
+  after: FrictionMetrics
+  beforeWindow: EvaluationSnapshot
+  afterWindow: EvaluationSnapshot
+}): ReplayComparison {
+  const windows = assertNonOverlappingWindows(input.beforeWindow, input.afterWindow)
+  if (!windows.ok) {
+    return {
+      before: input.before,
+      after: input.after,
+      verdict: "inconclusive",
+      notes: [windows.message],
+      normalized: false,
+    }
+  }
+  const cmp = compareFriction(input.before, input.after)
+  cmp.notes.unshift(
+    `windows ok: [${input.beforeWindow.windowStartMs},${input.beforeWindow.windowEndMs}) → [${input.afterWindow.windowStartMs},${input.afterWindow.windowEndMs})`,
+  )
+  return cmp
 }
 
 export function formatEval(c: ReplayComparison): string {
   return [
     `# Evaluation gate: ${c.verdict}`,
+    c.normalized ? "(normalized per session / user-turn)" : "(absolute counts)",
+    c.sampleSize ? `sample: before=${c.sampleSize.before} after=${c.sampleSize.after}` : "",
     "",
     ...c.notes.map((n) => `- ${n}`),
     "",
@@ -64,7 +147,9 @@ export function formatEval(c: ReplayComparison): string {
       : c.verdict === "fail"
         ? "Reject or rollback candidate."
         : "Needs more evidence / human judgment.",
-  ].join("\n")
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 /** Combine friction compare + scenario fixture scores into one gate. */

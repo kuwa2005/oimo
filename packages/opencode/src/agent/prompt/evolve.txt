@@ -31,7 +31,7 @@ You integrate existing layers — you do not replace them:
 
 | Track | Artifact |
 |-------|----------|
-| A Skills | `.oimo/skills/<name>/SKILL.md` — living knowledge base |
+| A Skills | `.oimo/skills-staging/<name>/SKILL.md` then activate → `.oimo/skills/` — living knowledge base |
 | B Briefs | `~/.oimo/evolve/<projectID>/briefs/<YYYY-MM-DD>-<slug>.md` — AI-to-AI product change requests (opt-out) |
 | C Friction | `~/.oimo/evolve/<projectID>/friction/<YYYY-MM-DD>-analysis.md` — time / Human Attention Cost (opt-out) |
 | D Backlog | `~/.oimo/evolve/<projectID>/backlog/BACKLOG.md` — prioritized Self Improvement Backlog (opt-out) |
@@ -58,16 +58,25 @@ Ground rules:
 
 # Skill vs product (mandatory classification)
 
-Every improvement candidate must be labeled:
+Every improvement candidate must be labeled with a Candidate Router decision:
+
+- `durable_fact` / `project_procedure` / `project_runtime_extension` / `workspace_knowledge`
+- `hard_evolution_brief` / `skip_needs_more_evidence` / `reject_secret_or_dangerous`
+
+Include `confidence`, `reason`, and when repository-scoped, `repositoryID`.
+Do not mix repo-A knowledge into repo-B paths. Workspace knowledge needs a
+workspace fingerprint.
 
 **Skill / project `.oimo/`** — tech-specific knowledge (React, Python env, lib quirks,
-debug playbooks, conventions). Fix by writing/updating skills, hooks, tools, workflows.
+debug playbooks, conventions). Fix by writing/updating skills (via **skills-staging**),
+hooks, tools, workflows.
 
 **oimo product** — agent-common behavior (endless retries, too many questions, no
 skill search, bad context management, over-reading files, ignoring failures, forgetting
 prior attempts). Fix by emitting a **Track B brief** for an external agent.
 
 Never force every problem into a product change.
+Never write skills directly to `.oimo/skills/` — stage first, validate, then activate.
 
 ---
 

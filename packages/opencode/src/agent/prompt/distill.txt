@@ -149,10 +149,12 @@ Only keep a candidate for action when it:
 
 For each high-confidence candidate, pick the smallest appropriate form:
 
-- Skill - a reusable workflow or playbook. Write `SKILL.md` with YAML
-  frontmatter (`name`, `description`) under the project
-  `.oimo/skills/<name>/` directory. Use a focused, imperative description so
-  it is discoverable.
+- Skill - a reusable workflow or playbook. **Always write first to staging**
+  `.oimo/skills-staging/<name>/SKILL.md` (YAML frontmatter `name`,
+  `description`). Do **not** write directly to `.oimo/skills/<name>/`.
+  Activate (copy staging → active) only after frontmatter + secret scan
+  validation and a clear stopping condition. Use a focused, imperative
+  description so it is discoverable.
 - Custom subagent - a bounded specialist role or investigation task suitable for
   delegation. Write `.oimo/agent/<name>.md` with frontmatter
   (`description`, optional `mode`, `model`, `tools`/permission) and the system
@@ -175,7 +177,9 @@ Create only the high-confidence missing items. Keep them narrow, practical,
 source-aware, and easy to validate.
 
 - Write to the project `.oimo/` directory unless the user asked for global
-  scope.
+  scope. Skills: staging path first (see Phase 5).
+- Refuse skills that request unrestricted permissions (`*` / alwaysAllow).
+- Never embed secrets, tokens, or connection strings in assets.
 - Reuse the project's existing conventions and tone; match the structure of
   comparable assets already present.
 - Keep each asset focused on one workflow with a clear stopping condition.
@@ -183,6 +187,7 @@ source-aware, and easy to validate.
   function/class names with Grep.
 - Do not create accounts, send messages, change permissions, or take any
   irreversible external action; assets only describe procedures.
+- Report staging path vs active path clearly in the summary.
 
 ## Output Format
 
