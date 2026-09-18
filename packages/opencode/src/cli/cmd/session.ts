@@ -145,10 +145,7 @@ export const SessionListCommand = cmd({
         return
       }
 
-      if (args.autonomy && args.fde) {
-        // Canonical: profile=fde, learningLenses=[se,fde] — same as TUI / CLI direct.
-        // Kept as a soft notice only; do not reject (blocker #5).
-      }
+      // --se --fde: same canonical rule as TUI (profile=fde, lenses se+fde). Do not reject.
       if (args.continue && args.warm) {
         UI.error("--continue and --warm cannot be used together")
         await Log.exit(1)
