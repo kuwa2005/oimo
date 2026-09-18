@@ -48,6 +48,15 @@ export const WriteTool = Tool.define(
           })
 
           yield* fs.writeWithDirs(filepath, params.content)
+          yield* Effect.tryPromise(() =>
+            import("@/repo-workspace").then((m) =>
+              m.RecordMutation.recordMutation({
+                sessionID: ctx.sessionID,
+                absolutePath: filepath,
+                action: exists ? "modify" : "create",
+              }),
+            ),
+          ).pipe(Effect.catch(() => Effect.void))
           yield* format.file(filepath)
           yield* bus.publish(File.Event.Edited, { file: filepath })
           yield* bus.publish(FileWatcher.Event.Updated, {
@@ -73,8 +82,14 @@ export const WriteTool = Tool.define(
             output += `\n\nLSP errors detected in other files:\n${block}`
           }
 
+          const { Runtime, Policy } = yield* Effect.promise(() => import("@/repo-workspace"))
+          const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
+          const title = Policy.displayPath(workspace, filepath, Instance.worktree)
+
           return {
-            title: path.relative(Instance.worktree, filepath),
+            title,
             metadata: {
               diagnostics,
               diff,

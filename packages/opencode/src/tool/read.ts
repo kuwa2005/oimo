@@ -8,7 +8,7 @@ import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import { LSP } from "../lsp"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
-import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertReadAllowed } from "./external-directory"
 import { SessionCwd } from "./session-cwd"
 import { Instruction } from "../session/instruction"
 import { Provider } from "@/provider"
@@ -22,7 +22,13 @@ const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 
 const parameters = z.object({
-  file_path: z.string().describe("The absolute path to the file or directory to read"),
+  file_path: z.string().describe("The absolute path to the file or directory to read, or a path relative to repositoryId"),
+  repositoryId: z
+    .string()
+    .optional()
+    .describe(
+      "When a multi-repo workspace is configured: repository id that owns this path. Omit for primary. Results are titled as repo-id:path.",
+    ),
   offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
   limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
 })
@@ -149,13 +155,44 @@ export const ReadTool = Tool.define(
       }
 
       let filepath = params.file_path
-      if (!path.isAbsolute(filepath)) {
+      let title = path.relative(Instance.worktree, filepath)
+
+      if (params.repositoryId) {
+        const { Runtime, Policy, resolveAbsolute, formatLocation } = yield* Effect.promise(() => import("@/repo-workspace"))
+        const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
+        )
+        if (!workspace) {
+          return yield* Effect.fail(
+            new Error("No multi-repo workspace loaded; omit repositoryId or configure repos.txt / workspace.yaml"),
+          )
+        }
+        filepath = path.isAbsolute(params.file_path)
+          ? params.file_path
+          : resolveAbsolute(workspace, params.repositoryId, params.file_path)
+        const hit = Policy.decideRead(workspace, { absolutePath: filepath })
+        if (!hit.ok) {
+          return yield* Effect.fail(new Error(`repo-workspace read denied (${hit.code}): ${hit.message}`))
+        }
+        title = formatLocation(hit.location)
+      } else if (!path.isAbsolute(filepath)) {
         filepath = path.resolve(SessionCwd.get(ctx.sessionID), filepath)
       }
       if (process.platform === "win32") {
         filepath = AppFileSystem.normalizePath(filepath)
       }
-      const title = path.relative(Instance.worktree, filepath)
+      if (!params.repositoryId) {
+        const { Runtime, Policy } = yield* Effect.promise(() => import("@/repo-workspace"))
+        const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+          Effect.catch(() => Effect.succeed(undefined)),
+        )
+        if (workspace) {
+          const hit = Policy.decideRead(workspace, { absolutePath: filepath })
+          if (hit.ok) title = `${hit.location.repositoryId}:${hit.location.relativePath}`
+        } else {
+          title = path.relative(Instance.worktree, filepath)
+        }
+      }
 
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(
@@ -164,9 +201,10 @@ export const ReadTool = Tool.define(
         ),
       )
 
-      yield* assertExternalDirectoryEffect(ctx, filepath, {
+      yield* assertReadAllowed(ctx, filepath, {
         bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
         kind: stat?.type === "Directory" ? "directory" : "file",
+        repositoryId: params.repositoryId,
       })
 
       yield* ctx.ask({

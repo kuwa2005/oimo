@@ -55,6 +55,13 @@ export const SkillTool = Tool.define(
             )
           }
 
+          const workspace = yield* Effect.tryPromise(() =>
+            import("@/repo-workspace").then((m) => m.Runtime.current()),
+          ).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (workspace) {
+            Skill.assertSkillAllowedForWorkspace(info, { multiRepo: true, needsWrite: false })
+          }
+
           yield* ctx.ask({
             permission: "skill",
             patterns: [params.name],

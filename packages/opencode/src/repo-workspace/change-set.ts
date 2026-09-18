@@ -1,6 +1,13 @@
 /** Cross-repository change tracking (oimo-internal; not a Git commit). */
 
+import { Database, eq } from "@/storage"
+import type { ApprovalFingerprint } from "./repo-workspace.sql"
+import { RepoWorkspaceStateTable } from "./repo-workspace.sql"
+
 export type ChangeSetStatus = "planned" | "approved" | "complete" | "partial" | "failed" | "cancelled"
+
+/** Customer edits vs self-evolution / memory must never share one Change set. */
+export type ChangeSetKind = "customer" | "evolve" | "memory"
 
 export type ChangeSetFile = {
   repositoryId: string
@@ -42,11 +49,48 @@ export type ChangeSet = {
   id: string
   sessionID: string
   status: ChangeSetStatus
+  kind: ChangeSetKind
   plan: CrossRepoPlan
   executionScope: string[]
   repos: ChangeSetRepoResult[]
   createdAt: string
   updatedAt: string
+  approvalFingerprint?: ApprovalFingerprint
+  workspaceFingerprint?: string
+}
+
+/** Durable key so evolve/memory Change sets do not overwrite customer state. */
+export function storageKey(sessionID: string, kind: ChangeSetKind = "customer") {
+  return kind === "customer" ? sessionID : `${sessionID}::${kind}`
+}
+
+export function inferKindFromPath(absolutePath: string): ChangeSetKind {
+  const norm = absolutePath.replace(/\\/g, "/")
+  if (norm.includes("/.oimo/evolve/") || /\/\.oimo\/evolve(\/|$)/.test(norm)) {
+    return "evolve"
+  }
+  if (norm.includes("/data/memory/") || norm.includes("/.oimo/memory/")) {
+    return "memory"
+  }
+  return "customer"
+}
+
+export function assertKindAllowsPath(cs: ChangeSet, absolutePath: string) {
+  const inferred = inferKindFromPath(absolutePath)
+  if (cs.kind === inferred) return { ok: true as const }
+  return {
+    ok: false as const,
+    message: `Change set kind "${cs.kind}" cannot record path for kind "${inferred}" (${absolutePath})`,
+  }
+}
+
+const ALLOWED: Record<ChangeSetStatus, ChangeSetStatus[]> = {
+  planned: ["approved", "cancelled"],
+  approved: ["complete", "partial", "failed", "cancelled"],
+  complete: [],
+  partial: ["approved", "cancelled"],
+  failed: ["approved", "cancelled"],
+  cancelled: [],
 }
 
 export function createPlan(input: {
@@ -71,17 +115,23 @@ export function createChangeSet(input: {
   sessionID: string
   plan: CrossRepoPlan
   executionScope: string[]
+  workspaceFingerprint?: string
+  approvalFingerprint?: ApprovalFingerprint
+  kind?: ChangeSetKind
 }): ChangeSet {
   const now = new Date().toISOString()
   return {
-    id: `cs-${Date.now()}`,
+    id: `cs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sessionID: input.sessionID,
     status: input.plan.approvedAt ? "approved" : "planned",
+    kind: input.kind ?? "customer",
     plan: input.plan,
     executionScope: [...input.executionScope],
     repos: input.executionScope.map((repositoryId) => ({ repositoryId, files: [] })),
     createdAt: now,
     updatedAt: now,
+    workspaceFingerprint: input.workspaceFingerprint,
+    approvalFingerprint: input.approvalFingerprint,
   }
 }
 
@@ -89,10 +139,7 @@ export function approvePlan(plan: CrossRepoPlan, by: "user" | "auto"): CrossRepo
   return { ...plan, approvedAt: new Date().toISOString(), approvedBy: by }
 }
 
-export function recordFileChange(
-  cs: ChangeSet,
-  file: ChangeSetFile,
-): ChangeSet {
+export function recordFileChange(cs: ChangeSet, file: ChangeSetFile): ChangeSet {
   const repos = cs.repos.map((r) => {
     if (r.repositoryId !== file.repositoryId) return r
     const files = [...r.files.filter((f) => f.relativePath !== file.relativePath), file]
@@ -106,11 +153,22 @@ export function recordFileChange(
   }
 }
 
+export function transitionStatus(
+  cs: ChangeSet,
+  status: ChangeSetStatus,
+): ChangeSet {
+  const allowed = ALLOWED[cs.status]
+  if (!allowed.includes(status)) {
+    throw new Error(`Invalid change set transition ${cs.status} → ${status}`)
+  }
+  return { ...cs, status, updatedAt: new Date().toISOString() }
+}
+
 export function finalizeChangeSet(
   cs: ChangeSet,
   status: Extract<ChangeSetStatus, "complete" | "partial" | "failed" | "cancelled">,
 ): ChangeSet {
-  return { ...cs, status, updatedAt: new Date().toISOString() }
+  return transitionStatus(cs, status)
 }
 
 export function formatPlan(plan: CrossRepoPlan): string {
@@ -152,16 +210,76 @@ export function formatChangeSet(cs: ChangeSet): string {
   return lines.join("\n")
 }
 
-/** In-memory store keyed by session (persisted later via session fingerprint extension). */
+/** In-memory cache; SQLite is the durable store. Keyed by storageKey(session, kind). */
 const bySession = new Map<string, ChangeSet>()
 
-export function saveChangeSet(cs: ChangeSet) {
-  bySession.set(cs.sessionID, cs)
-  return cs
+function normalize(cs: ChangeSet): ChangeSet {
+  return { ...cs, kind: cs.kind ?? "customer" }
 }
 
-export function loadChangeSet(sessionID: string) {
-  return bySession.get(sessionID)
+function persist(cs: ChangeSet) {
+  const key = storageKey(cs.sessionID, cs.kind ?? "customer")
+  const value = normalize(cs)
+  bySession.set(key, value)
+  try {
+    const now = Date.now()
+    Database.transaction((db) => {
+      const existing = db
+        .select()
+        .from(RepoWorkspaceStateTable)
+        .where(eq(RepoWorkspaceStateTable.session_id, key as never))
+        .get()
+      const row = {
+        session_id: key as never,
+        workspace_fingerprint: value.workspaceFingerprint ?? "",
+        execution_scope: value.executionScope,
+        change_set: value,
+        approval_fingerprint: value.approvalFingerprint,
+        time_created: existing?.time_created ?? now,
+        time_updated: now,
+      }
+      if (existing) {
+        db.update(RepoWorkspaceStateTable)
+          .set({
+            workspace_fingerprint: row.workspace_fingerprint,
+            execution_scope: row.execution_scope,
+            change_set: row.change_set,
+            approval_fingerprint: row.approval_fingerprint,
+            time_updated: row.time_updated,
+          })
+          .where(eq(RepoWorkspaceStateTable.session_id, key as never))
+          .run()
+        return
+      }
+      db.insert(RepoWorkspaceStateTable).values(row).run()
+    })
+  } catch {
+    // Unit tests / pre-migration environments keep the in-memory cache only.
+  }
+  return value
+}
+
+export function saveChangeSet(cs: ChangeSet) {
+  return persist(cs)
+}
+
+export function loadChangeSet(sessionID: string, kind: ChangeSetKind = "customer") {
+  const key = storageKey(sessionID, kind)
+  const cached = bySession.get(key)
+  if (cached) return normalize(cached)
+  try {
+    const row = Database.use((db) =>
+      db.select().from(RepoWorkspaceStateTable).where(eq(RepoWorkspaceStateTable.session_id, key as never)).get(),
+    )
+    if (row?.change_set) {
+      const value = normalize(row.change_set)
+      bySession.set(key, value)
+      return value
+    }
+  } catch {
+    // ignore
+  }
+  return
 }
 
 export function clearChangeSets() {

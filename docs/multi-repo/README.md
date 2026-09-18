@@ -12,6 +12,7 @@ oimo は複数の独立した Git リポジトリを一つの **System Workspace
 | [samples/](./samples/) | コピペ用サンプル |
 | [current-architecture.md](./current-architecture.md) | 現状アーキテクチャ調査（日本語） |
 | [implementation-plan.md](./implementation-plan.md) | 実装計画・Phase 分割（日本語） |
+| [completion-instructions.md](./completion-instructions.md) | **完全対応・安全化の実装契約、受け入れテスト、完了条件** |
 | [../oimo-multi-repository-implementation-instructions.md](../oimo-multi-repository-implementation-instructions.md) | 要件・安全条件の指示書（日本語） |
 
 ---
@@ -136,19 +137,46 @@ oimo が読むキー: セクション名、`path`、`url`、`branch`
 
 ---
 
-## このリリースでできること（進行中）
+## このリリースでできること
 
 | 能力 | 状態 |
 |------|------|
 | `repos.txt` / `workspace.yaml` / `.gitmodules` で登録 | 対応済み |
-| パス解決、`repo-id:path`、read-only・未登録書込の拒否 | Resolver + 書込ゲート配線済み |
-| doctor・セッション指紋（作成時キャプチャ） | 対応済み |
-| CLI `oimo repos list\|doctor` / TUI `/repos` | 対応済み |
-| 横断 grep（`repositories: [id…]` 明示時のみ） | Phase 2 一部対応 |
-| 影響グラフ・計画付き横断編集・リポ別検証 | 予定（Phase 3–5） |
+| パス解決、`repo-id:path`、read-only・未登録書込の拒否 | Resolver + **Policy** + 書込ゲート |
+| doctor・セッション指紋（作成時キャプチャ + 再開時 restore） | 対応済み |
+| CLI `oimo repos …` / TUI `/repos`（approve/reject） | 対応済み |
+| 横断 grep / glob / read / view-image / LSP | 対応済み |
+| Change set / execution scope の SQLite 永続化 | 対応済み |
+| 影響グラフ・計画付き横断編集・リポ別検証 | 対応済み（検出器は拡張継続可） |
+| shell / Git Repository-aware + Policy | 対応済み（bwrap 無しは下記除外） |
+| workflow 書込の Policy | 対応済み |
+| Goal Judge × evidence manifest | 対応済み |
+| Plugin 書込（`ask` 経由） | Policy ゲート済み |
 
 設定ファイルが無い単一リポ利用は従来どおりです。  
-FDE（`oimo --fde`）と組み合わせると、API + UI + schema にまたがる現場スパイクに向きます（infra は `read-only` 推奨）。
+受け入れ証跡: [completion-evidence.md](./completion-evidence.md) / 契約: [completion-instructions.md](./completion-instructions.md)。
+
+> 登録済みリポジトリを execution scope と承認済み Change set のもとで横断的に調査・変更・検証できます。未登録、read-only、scope 外の変更は file、shell、Git、workflow の共通 Policy で拒否されます。
+
+### 対応 OS（正式）
+
+| 環境 | 状態 |
+|------|------|
+| Linux（ネイティブ） | **正式対応**（パス境界・shell adversarial・repo-workspace テストを実行） |
+| Linux on WSL2 | **正式対応**（上記と同系。本リポジトリの開発・証跡取得環境） |
+| macOS | **未検証** — 正式対応範囲外（パス大小文字・sandbox 差は未テスト） |
+| Windows ネイティブ | **未検証** — 正式対応範囲外（drive / UNC / junction は未テスト） |
+
+未検証 OS ではプレビュー利用は可能ですが、リリース判定の「クロスプラットフォーム完了」には含めません。証跡: [completion-evidence.md](./completion-evidence.md)。
+
+### 正式対応から除外する実行面（意図的）
+
+| 面 | 扱い |
+|----|------|
+| ShellJail で bwrap が無い環境 | Policy + opaque-write heuristic のみ（OS sandbox 無し） |
+| MCP / プラグインが `ask` を経由せずに書き込む経路 | 信頼済み拡張として Policy 対象外 |
+
+CLI の Git 状態は `oimo repos status`（repo ごとに branch/HEAD/dirty を表示し、単一 worktree にまとめません）。
 
 ---
 

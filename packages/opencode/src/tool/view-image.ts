@@ -5,13 +5,17 @@ import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import type { Provider } from "@/provider"
 import { Instance } from "@/project/instance"
 import { isImageAttachment, sniffAttachmentMime } from "@/util/media"
-import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertReadAllowed } from "./external-directory"
 import { SessionCwd } from "./session-cwd"
 import * as Tool from "./tool"
 import DESCRIPTION from "./view-image.txt"
 
 const parameters = z.object({
   path: z.string().describe("Local filesystem path to an image file."),
+  repositoryId: z
+    .string()
+    .optional()
+    .describe("When a multi-repo workspace is configured: repository id that owns this image. Omit for primary."),
   detail: z
     .enum(["high", "original"])
     .optional()
@@ -43,34 +47,51 @@ export const ViewImageTool = Tool.define(
               : path.isAbsolute(params.path)
                 ? params.path
                 : path.resolve(SessionCwd.get(ctx.sessionID), params.path)
-          const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const resolved = yield* Effect.gen(function* () {
+            if (!params.repositoryId) return filepath
+            const { Runtime, resolveAbsolute } = yield* Effect.promise(() => import("@/repo-workspace"))
+            const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (!workspace) {
+              return yield* Effect.fail(new Error("No multi-repo workspace loaded; omit repositoryId"))
+            }
+            return path.isAbsolute(params.path)
+              ? filepath
+              : resolveAbsolute(workspace, params.repositoryId, params.path)
+          })
+          const stat = yield* fs.stat(resolved).pipe(Effect.catch(() => Effect.succeed(undefined)))
 
-          yield* assertExternalDirectoryEffect(ctx, filepath, { kind: "file" })
+          yield* assertReadAllowed(ctx, resolved, { kind: "file", repositoryId: params.repositoryId })
           yield* ctx.ask({
             permission: "read",
-            patterns: [filepath],
+            patterns: [resolved],
             always: ["*"],
-            metadata: {},
+            metadata: { repositoryId: params.repositoryId },
           })
 
           if (!stat) {
-            return yield* Effect.fail(new Error(`unable to locate image at \`${filepath}\``))
+            return yield* Effect.fail(new Error(`unable to locate image at \`${resolved}\``))
           }
           if (stat.type !== "File") {
-            return yield* Effect.fail(new Error(`image path \`${filepath}\` is not a file`))
+            return yield* Effect.fail(new Error(`image path \`${resolved}\` is not a file`))
           }
 
-          const bytes = yield* fs.readFile(filepath)
-          const mime = sniffAttachmentMime(bytes.subarray(0, 4096), AppFileSystem.mimeType(filepath))
+          const bytes = yield* fs.readFile(resolved)
+          const mime = sniffAttachmentMime(bytes.subarray(0, 4096), AppFileSystem.mimeType(resolved))
           if (!isImageAttachment(mime) || !SUPPORTED_MIMES.has(mime)) {
             return yield* Effect.fail(
-              new Error(`image path \`${filepath}\` is not a supported JPEG, PNG, GIF, or WebP image`),
+              new Error(`image path \`${resolved}\` is not a supported JPEG, PNG, GIF, or WebP image`),
             )
           }
 
           const detail = params.detail ?? "high"
+          const { Runtime, Policy } = yield* Effect.promise(() => import("@/repo-workspace"))
+          const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
           return {
-            title: path.relative(Instance.worktree, filepath),
+            title: Policy.displayPath(workspace, resolved, Instance.worktree),
             output: `Image viewed successfully (${detail} detail)`,
             metadata: { detail },
             attachments: [
@@ -78,7 +99,7 @@ export const ViewImageTool = Tool.define(
                 type: "file" as const,
                 mime,
                 url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
-                filename: path.basename(filepath),
+                filename: path.basename(resolved),
               },
             ],
           }

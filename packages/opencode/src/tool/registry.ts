@@ -185,7 +185,23 @@ export const layer = Layer.effect(
               Effect.gen(function* () {
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
-                  ask: (req) => toolCtx.ask(req),
+                  ask: (req) =>
+                    Effect.gen(function* () {
+                      const { Runtime, Policy } = yield* Effect.promise(() => import("@/repo-workspace"))
+                      const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+                        Effect.catch(() => Effect.succeed(undefined)),
+                      )
+                      if (workspace) {
+                        const gate = Policy.assertPluginAskPatterns(workspace, toolCtx.sessionID, {
+                          toolId: id,
+                          permission: req.permission,
+                          patterns: req.patterns,
+                          directory: ctx.directory,
+                        })
+                        if (!gate.ok) throw new Error(gate.message)
+                      }
+                      yield* toolCtx.ask(req)
+                    }),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }

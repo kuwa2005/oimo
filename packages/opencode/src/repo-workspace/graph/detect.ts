@@ -30,6 +30,9 @@ export async function detectEdges(info: Info): Promise<RepositoryEdge[]> {
     raw.push(...(await detectCompose(info, repo.id, root, ids)))
     raw.push(...(await detectDocsMentions(info, repo.id, root, ids)))
     raw.push(...(await detectTsImports(info, repo.id, root, ids)))
+    raw.push(...(await detectContractFiles(info, repo.id, root, ids)))
+    raw.push(...(await detectInfraFiles(info, repo.id, root, ids)))
+    raw.push(...(await detectEventNames(info, repo.id, root, ids)))
   }
 
   return mergeEdges(raw.filter((e) => e.from !== e.to && !isSecretCandidatePath(e.evidence.path)))
@@ -264,6 +267,109 @@ async function detectTsImports(
             description: `relative import "${spec}"`,
           },
         })
+      }
+    }
+  }
+  return out
+}
+
+async function detectContractFiles(_info: Info, repositoryId: string, root: string, ids: string[]) {
+  const out: RawEdge[] = []
+  const candidates = [
+    "schema.graphql",
+    "schema.gql",
+    "api.graphql",
+    "proto/api.proto",
+    "api.proto",
+    "schema.prisma",
+    "prisma/schema.prisma",
+  ]
+  for (const rel of candidates) {
+    const file = path.join(root, rel)
+    if (!(await Bun.file(file).exists())) continue
+    const text = await Bun.file(file).text().catch(() => "")
+    for (const id of ids) {
+      if (id === repositoryId) continue
+      if (text.includes(id) || rel.includes(id)) {
+        out.push({
+          from: repositoryId,
+          to: id,
+          kind: "api",
+          confidence: "medium",
+          source: "detected",
+          evidence: {
+            repositoryId,
+            path: rel,
+            description: `contract/schema file references "${id}"`,
+          },
+        })
+      }
+    }
+  }
+  return out
+}
+
+async function detectInfraFiles(_info: Info, repositoryId: string, root: string, ids: string[]) {
+  const out: RawEdge[] = []
+  const candidates = [
+    "main.tf",
+    "terraform/main.tf",
+    "k8s/deployment.yaml",
+    "deploy/k8s.yaml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/ci.yaml",
+  ]
+  for (const rel of candidates) {
+    const file = path.join(root, rel)
+    if (!(await Bun.file(file).exists())) continue
+    const text = await Bun.file(file).text().catch(() => "")
+    for (const id of ids) {
+      if (id === repositoryId) continue
+      if (text.includes(id)) {
+        out.push({
+          from: repositoryId,
+          to: id,
+          kind: "deploy",
+          confidence: "low",
+          source: "detected",
+          evidence: {
+            repositoryId,
+            path: rel,
+            description: `infra/CI mention of "${id}"`,
+          },
+        })
+      }
+    }
+  }
+  return out
+}
+
+async function detectEventNames(_info: Info, repositoryId: string, root: string, ids: string[]) {
+  const out: RawEdge[] = []
+  const candidates = ["src/events.ts", "src/events.js", "events.ts", "pkg/events.go", "app/events.py"]
+  for (const rel of candidates) {
+    const file = path.join(root, rel)
+    if (!(await Bun.file(file).exists())) continue
+    const text = await Bun.file(file).text().catch(() => "")
+    const topics = text.matchAll(/(?:topic|queue|subject|event(?:Name)?)\s*[:=]\s*["']([^"']+)["']/gi)
+    for (const m of topics) {
+      const name = m[1]
+      for (const id of ids) {
+        if (id === repositoryId) continue
+        if (name.includes(id)) {
+          out.push({
+            from: repositoryId,
+            to: id,
+            kind: "event",
+            confidence: "low",
+            source: "detected",
+            evidence: {
+              repositoryId,
+              path: rel,
+              description: `event/queue reference "${name}"`,
+            },
+          })
+        }
       }
     }
   }

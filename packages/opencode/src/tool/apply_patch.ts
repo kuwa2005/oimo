@@ -222,11 +222,29 @@ export const ApplyPatchTool = Tool.define(
             // Create parent directories (recursive: true is safe on existing/root dirs)
 
             yield* afs.writeWithDirs(change.filePath, change.newContent)
+            yield* Effect.tryPromise(() =>
+              import("@/repo-workspace").then((m) =>
+                m.RecordMutation.recordMutation({
+                  sessionID: ctx.sessionID,
+                  absolutePath: change.filePath,
+                  action: "create",
+                }),
+              ),
+            ).pipe(Effect.catch(() => Effect.void))
             updates.push({ file: change.filePath, event: "add" })
             break
 
           case "update":
             yield* afs.writeWithDirs(change.filePath, change.newContent)
+            yield* Effect.tryPromise(() =>
+              import("@/repo-workspace").then((m) =>
+                m.RecordMutation.recordMutation({
+                  sessionID: ctx.sessionID,
+                  absolutePath: change.filePath,
+                  action: "modify",
+                }),
+              ),
+            ).pipe(Effect.catch(() => Effect.void))
             updates.push({ file: change.filePath, event: "change" })
             break
 
@@ -236,6 +254,20 @@ export const ApplyPatchTool = Tool.define(
 
               yield* afs.writeWithDirs(change.movePath!, change.newContent)
               yield* afs.remove(change.filePath)
+              yield* Effect.tryPromise(() =>
+                import("@/repo-workspace").then(async (m) => {
+                  await m.RecordMutation.recordMutation({
+                    sessionID: ctx.sessionID,
+                    absolutePath: change.filePath,
+                    action: "delete",
+                  })
+                  await m.RecordMutation.recordMutation({
+                    sessionID: ctx.sessionID,
+                    absolutePath: change.movePath!,
+                    action: "create",
+                  })
+                }),
+              ).pipe(Effect.catch(() => Effect.void))
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
             }

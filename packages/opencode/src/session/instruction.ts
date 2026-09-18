@@ -218,8 +218,39 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         const target = path.resolve(filepath)
         let current = path.dirname(target)
 
+        // When a multi-repo workspace is active, stop at the owning repository root
+        // so primary AGENTS.md is not inherited into sibling repos.
+        let stopAt = root
+        {
+          const workspace = yield* Effect.tryPromise(() =>
+            import("@/repo-workspace").then((m) => m.Runtime.current()),
+          ).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (workspace) {
+            const hit = (yield* Effect.promise(() => import("@/repo-workspace"))).locate(workspace, target)
+            if (hit) stopAt = hit.repository.canonicalPath
+          }
+        }
+
         // Walk upward from the file being read and attach nearby instruction files once per message.
-        while (current.startsWith(root) && current !== root) {
+        while ((current.startsWith(stopAt) || current === stopAt) && current !== path.dirname(stopAt)) {
+          if (current === stopAt) {
+            const found = yield* find(current)
+            if (found && found !== target && !sys.has(found) && !already.has(found)) {
+              let set = s.claims.get(messageID)
+              if (!set) {
+                set = new Set()
+                s.claims.set(messageID, set)
+              }
+              if (!set.has(found)) {
+                set.add(found)
+                const content = yield* read(found)
+                if (content) {
+                  results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+                }
+              }
+            }
+            break
+          }
           const found = yield* find(current)
           if (!found || found === target || sys.has(found) || already.has(found)) {
             current = path.dirname(current)

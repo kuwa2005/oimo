@@ -1659,7 +1659,7 @@ export type GlobalEvent = {
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
 /**
- * Server configuration for mimo serve and web commands
+ * Server configuration for oimo serve and web commands
  */
 export type ServerConfig = {
   /**
@@ -1682,6 +1682,20 @@ export type ServerConfig = {
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
+}
+
+/**
+ * Token lifetime defaults for the temporary local LLM server (mimo llm-server)
+ */
+export type LlmServerConfig = {
+  /**
+   * Default sliding lifetime for issued tokens, measured from last use (e.g. '30m', '12h', '1d', or 'none'). Default '1d'.
+   */
+  ttl?: string
+  /**
+   * Absolute ceiling from issue, regardless of activity (e.g. '7d', or 'none'). Default 'none', so an actively used token is not cut off.
+   */
+  maxAge?: string
 }
 
 export type PermissionActionConfig = "ask" | "allow" | "deny"
@@ -1834,6 +1848,8 @@ export type ProviderConfig = {
       reasoning?: boolean
       temperature?: boolean
       tool_call?: boolean
+      voice_design?: boolean
+      voice_clone?: boolean
       interleaved?:
         | true
         | {
@@ -1988,6 +2004,7 @@ export type Config = {
   $schema?: string
   logLevel?: LogLevel
   server?: ServerConfig
+  llmServer?: LlmServerConfig
   /**
    * Command configuration, see https://mimo.xiaomi.com/mimocode/commands
    */
@@ -2039,6 +2056,10 @@ export type Config = {
      */
     hearing_first?: boolean
     /**
+     * When hearing_first is true: se (default, Requirements Lock) or fde (Forward Deployed Engineer, Solution Lock, PoC allowed before lock).
+     */
+    persona?: "se" | "fde"
+    /**
      * When true (default), the stop-condition requires documentary evidence (hearing log, requirements/specs including test criteria, verification) before the judge may allow stop.
      */
     docs_evidence?: boolean
@@ -2058,6 +2079,39 @@ export type Config = {
      * Judge evaluation retries before stopping with judge_failed (default 2).
      */
     judge_max_retries?: number
+  }
+  /**
+   * Reliability harness: evidence freshness before goal stop, existence/claim checks on bash, loop convergence, and edit-scope boundaries. On by default; set enabled:false or MIMOCODE_DISABLE_RELIABILITY=1 to opt out.
+   */
+  reliability?: {
+    /**
+     * Enable the reliability harness (evidence freshness, existence/claim checks, loop convergence, edit scope). Defaults to on unless MIMOCODE_DISABLE_RELIABILITY=1 or enabled:false.
+     */
+    enabled?: boolean
+    /**
+     * Require fresh verification command evidence after edits before goal stop may complete. Defaults to true when reliability is enabled.
+     */
+    evidence?: boolean
+    /**
+     * Reject bash claims that reference nonexistent package scripts or local source paths. Defaults to true when reliability is enabled.
+     */
+    existence?: boolean
+    /**
+     * Enable try-best loop convergence pausing without MIMOCODE_ENABLE_TRY_BEST_HANDOFF. Defaults to true when reliability is enabled.
+     */
+    loop?: boolean
+    /**
+     * Enforce edit allow/deny globs (config + edit_scope tool + default protected paths). Defaults to true when reliability is enabled.
+     */
+    scope?: boolean
+    /**
+     * When non-empty, writes outside these globs (relative to worktree) are rejected. Empty means no allowlist restriction.
+     */
+    allow_globs?: Array<string>
+    /**
+     * Additional deny globs merged with default protected paths (.env, credentials, etc.).
+     */
+    deny_globs?: Array<string>
   }
   watcher?: {
     ignore?: Array<string>
@@ -2117,6 +2171,32 @@ export type Config = {
           default: string
           models?: Array<string>
         }
+  }
+  /**
+   * Auto (free) router settings. See docs/auto-free-fcc-sync.md. Future auto/paid and auto/hybrid: docs/auto-mode-roadmap.md
+   */
+  auto_free?: {
+    /**
+     * Ordered free provider/model refs for auto/free failover. When set, replaces the bundled FCC-synced catalog.
+     */
+    fallbacks?: Array<string>
+  }
+  /**
+   * OpenRouter (free) router settings. Requires OPENROUTER_API_KEY. See docs/openrouter-free.md.
+   */
+  openrouter_free?: {
+    /**
+     * Ordered openrouter/model refs for openrouter-free/free. When set, replaces the bundled API-synced catalog.
+     */
+    fallbacks?: Array<string>
+    /**
+     * Override try-order among bundled OpenRouter :free models (model ids without openrouter/ prefix).
+     */
+    preferred_order?: Array<string>
+    /**
+     * Reserved: runtime refresh TTL for OpenRouter free catalog (build-time sync is default).
+     */
+    sync_ttl_hours?: number
   }
   /**
    * Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.
@@ -2341,7 +2421,7 @@ export type Config = {
   }
   memory?: {
     /**
-     * Stop WRITING new memory. Default: false (memory is written). When true, no new memory is produced — session checkpoint.md, project MEMORY.md, notes.md and per-task progress.md are never written, the high-pressure 'save your learnings to memory' nudge is suppressed, and automatic dream/distill runs are skipped. Existing memory stays READABLE on demand: the builtin `memory` search tool keeps working and the files can still be read directly. What does stop is the AUTOMATIC injection — checkpoint rebuild is short-circuited to compaction while writing is off, and the memory dumps that a rebuild would have placed in context are only produced by that rebuild, so nothing is loaded on its own; an agent that wants memory has to search or read for it. Nothing is ever deleted — set it back to false to resume writing on top of the existing files.
+     * Stop WRITING new memory. Default: false (memory is written). When true, no new memory is produced — session checkpoint.md, project MEMORY.md, notes.md and per-task progress.md are never written, the high-pressure 'save your learnings to memory' nudge is suppressed, and automatic dream/distill/evolve runs are skipped. Existing memory stays READABLE on demand: the builtin `memory` search tool keeps working and the files can still be read directly. What does stop is the AUTOMATIC injection — checkpoint rebuild is short-circuited to compaction while writing is off, and the memory dumps that a rebuild would have placed in context are only produced by that rebuild, so nothing is loaded on its own; an agent that wants memory has to search or read for it. Nothing is ever deleted — set it back to false to resume writing on top of the existing files.
      */
     disable_write?: boolean
     /**
@@ -2377,6 +2457,50 @@ export type Config = {
      * Minimum days between automatic distill runs. Default: 30.
      */
     interval_days?: number
+  }
+  evolve?: {
+    /**
+     * Auto-trigger Self Improvement Session (evolve) on new session start and write logs under ~/.oimo/evolve/<projectID>/. Default: true (opt-out with false).
+     */
+    auto?: boolean
+    /**
+     * Minimum days between automatic evolve runs. Default: 14.
+     */
+    interval_days?: number
+    skills?: {
+      /**
+       * Crystallize durable project knowledge into .oimo/skills (knowledge base). Default: true (opt-out). Planned to become opt-in later.
+       */
+      enabled?: boolean
+    }
+    briefs?: {
+      /**
+       * Write AI-to-AI product-modification briefs under ~/.oimo/evolve/<projectID>/briefs/ for an external coding agent. Default: true (opt-out). Planned to become opt-in later.
+       */
+      enabled?: boolean
+    }
+    friction?: {
+      /**
+       * Analyze friction / Human Attention Cost and write docs under ~/.oimo/evolve/<projectID>/friction/. Default: true (opt-out). Planned to become opt-in later.
+       */
+      enabled?: boolean
+    }
+    backlog?: {
+      /**
+       * Maintain prioritized Self Improvement Backlog at ~/.oimo/evolve/<projectID>/backlog/BACKLOG.md. Default: true (opt-out). Planned to become opt-in later.
+       */
+      enabled?: boolean
+    }
+    session_review?: {
+      /**
+       * Write session self-evaluation reviews under ~/.oimo/evolve/<projectID>/reviews/. Default: true (opt-out). Planned to become opt-in later.
+       */
+      enabled?: boolean
+    }
+    /**
+     * Allow auto-evolve to fire early when HAC/corrections/tool-churn thresholds are hit (requires evolve.auto, which defaults to true). Default: true.
+     */
+    condition_triggers?: boolean
   }
   /**
    * Voice input provider and model configuration.
@@ -2540,6 +2664,8 @@ export type Model = {
     reasoning: boolean
     attachment: boolean
     toolcall: boolean
+    voiceDesign?: boolean
+    voiceClone?: boolean
     input: {
       text: boolean
       audio: boolean
@@ -2964,6 +3090,14 @@ export type Path = {
 export type VcsInfo = {
   branch?: string
   default_branch?: string
+  repositories?: Array<{
+    repositoryId: string
+    root: string
+    head?: string
+    branch?: string
+    dirty: boolean
+    remoteNames: Array<string>
+  }>
 }
 
 export type VcsFileDiff = {
@@ -2972,6 +3106,7 @@ export type VcsFileDiff = {
   additions: number
   deletions: number
   status?: "added" | "deleted" | "modified"
+  repositoryId?: string
 }
 
 export type Command = {
@@ -3849,6 +3984,40 @@ export type ConfigUpdateResponses = {
 }
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
+
+export type ConfigAutonomyModeData = {
+  body?: {
+    mode: "none" | "normal" | "fde" | "special"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/autonomy-mode"
+}
+
+export type ConfigAutonomyModeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigAutonomyModeError = ConfigAutonomyModeErrors[keyof ConfigAutonomyModeErrors]
+
+export type ConfigAutonomyModeResponses = {
+  /**
+   * Updated config
+   */
+  200: {
+    config: Config
+    mode: "none" | "normal" | "fde" | "special"
+    goalsPromoted: number
+  }
+}
+
+export type ConfigAutonomyModeResponse = ConfigAutonomyModeResponses[keyof ConfigAutonomyModeResponses]
 
 export type ConfigProvidersData = {
   body?: never
@@ -6863,6 +7032,7 @@ export type VcsDiffData = {
     directory?: string
     workspace?: string
     mode: "git" | "branch"
+    repositoryId?: string
   }
   url: "/vcs/diff"
 }
@@ -6936,6 +7106,7 @@ export type AppSkillsResponses = {
     content: string
     disable_model_invocation?: boolean
     bundled?: boolean
+    capability?: "single-repo" | "multi-repo-read" | "multi-repo-write" | "workspace-read-only"
   }>
 }
 

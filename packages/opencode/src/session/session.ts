@@ -516,6 +516,9 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const get = Effect.fn("Session.get")(function* (id: SessionID) {
       const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
+      yield* Effect.tryPromise(() =>
+        import("@/repo-workspace").then((m) => m.Runtime.restoreSession(id)),
+      ).pipe(Effect.catch(() => Effect.void))
       return fromRow(row)
     })
 

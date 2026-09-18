@@ -53,6 +53,35 @@ const ReposDoctorCommand = cmd({
   },
 })
 
+const ReposStatusCommand = cmd({
+  command: "status",
+  describe: "Repository ごとの branch / HEAD / dirty を表示する（単一 worktree にまとめない）",
+  builder: (yargs: Argv) =>
+    yargs.option("repository", {
+      type: "string",
+      alias: "r",
+      describe: "単一 Repository id（省略時は全登録 repo）",
+    }),
+  async handler(args) {
+    await withCwd(async () => {
+      const info = await RepoWorkspace.Runtime.load(Instance.directory)
+      if (!info) {
+        console.log("No multi-repo workspace configured.")
+        return
+      }
+      const rows = args.repository
+        ? [RepoWorkspace.Git.status(info, String(args.repository))]
+        : RepoWorkspace.Git.statusAll(info)
+      for (const row of rows) {
+        const head = row.head ? row.head.slice(0, 12) : "(no HEAD)"
+        console.log(
+          `${row.repositoryId}\t${row.branch ?? "DETACHED"}\t${head}\t${row.dirty ? "dirty" : "clean"}\t${row.root}`,
+        )
+      }
+    })
+  },
+})
+
 const ReposGraphCommand = cmd({
   command: "graph",
   describe: "Repository 依存グラフを検出して表示する (evidence + confidence)",
@@ -137,6 +166,11 @@ const ReposPlanCommand = cmd({
       RepoWorkspace.ChangeSet.saveChangeSet(started.changeSet)
       if (args.approve) {
         RepoWorkspace.Scope.setScope(String(args.session), started.changeSet.executionScope)
+        RepoWorkspace.DirtyBaseline.captureBaseline(
+          String(args.session),
+          info,
+          started.changeSet.executionScope,
+        )
       }
       console.log(started.logLine)
       console.log("")
@@ -174,17 +208,14 @@ const ReposVerifyCommand = cmd({
             .filter(Boolean)
         : [...info.repositories.values()].filter((r) => r.kind === "git" || r.kind === "submodule").map((r) => r.id)
       const order = RepoWorkspace.Graph.suggestedBuildOrder(graph, ids)
-      const rows: Array<{ repositoryId: string; verification: Awaited<ReturnType<typeof RepoWorkspace.Verify.runVerify>> }> =
-        []
-      for (const id of order) {
-        const verification = await RepoWorkspace.Verify.runVerify({
-          info,
-          repositoryId: id,
-          dryRun: Boolean(args["dry-run"]),
-        })
-        rows.push({ repositoryId: id, verification })
-        console.log(`## ${id}`)
-        for (const c of verification.commands) {
+      const rows = await RepoWorkspace.Verify.runVerifyOrdered({
+        info,
+        repositoryIds: order,
+        dryRun: Boolean(args["dry-run"]),
+      })
+      for (const row of rows) {
+        console.log(`## ${row.repositoryId}`)
+        for (const c of row.verification.commands) {
           console.log(`  ${c.name}: ${c.status}${c.reason ? ` (${c.reason})` : ""}  cwd=${c.cwd}`)
         }
       }
@@ -195,17 +226,92 @@ const ReposVerifyCommand = cmd({
   },
 })
 
+const ReposChangeSetCommand = cmd({
+  command: "change-set",
+  aliases: ["changeset", "cs"],
+  describe: "永続化された Change set / execution scope を表示する（CLI・TUI 共通 DB）",
+  builder: (yargs: Argv) =>
+    yargs.option("session", {
+      type: "string",
+      default: "cli",
+      describe: "session id（TUI /repos も既定 cli を参照）",
+    }),
+  async handler(args) {
+    await withCwd(async () => {
+      const session = String(args.session)
+      const cs = RepoWorkspace.ChangeSet.loadChangeSet(session)
+      const scope = RepoWorkspace.Scope.getScope(session)
+      if (!cs) {
+        console.log(`No Change set for session=${session}`)
+        console.log("Create one with: oimo repos plan --query <q> --approve --session " + session)
+        return
+      }
+      console.log(RepoWorkspace.ChangeSet.formatChangeSet(cs))
+      console.log("")
+      console.log(`scope(memory/db): ${scope ? [...scope].join(", ") : "(none)"}`)
+      if (cs.approvalFingerprint) {
+        const info = await RepoWorkspace.Runtime.load(Instance.directory)
+        if (info) {
+          const stale = RepoWorkspace.SessionFingerprint.isApprovalStale(info, cs.approvalFingerprint)
+          console.log(stale ? `stale: ${stale.message}` : "stale: no")
+        }
+      }
+    })
+  },
+})
+
+const ReposApproveCommand = cmd({
+  command: "approve",
+  describe: "planned の Change set を承認する（TUI /repos と同じ session DB）",
+  builder: (yargs: Argv) =>
+    yargs.option("session", { type: "string", default: "cli", describe: "session id" }),
+  async handler(args) {
+    await withCwd(async () => {
+      const info = await RepoWorkspace.Runtime.load(Instance.directory)
+      if (!info) {
+        console.log("No multi-repo workspace configured.")
+        return
+      }
+      const next = RepoWorkspace.Plan.approveExistingChangeSet({
+        sessionID: String(args.session),
+        info,
+        by: "user",
+      })
+      console.log(RepoWorkspace.ChangeSet.formatChangeSet(next))
+    })
+  },
+})
+
+const ReposRejectCommand = cmd({
+  command: "reject",
+  aliases: ["cancel"],
+  describe: "Change set を cancelled にする",
+  builder: (yargs: Argv) =>
+    yargs.option("session", { type: "string", default: "cli", describe: "session id" }),
+  async handler(args) {
+    await withCwd(async () => {
+      const next = RepoWorkspace.Plan.rejectChangeSet(String(args.session))
+      console.log(RepoWorkspace.ChangeSet.formatChangeSet(next))
+    })
+  },
+})
+
 export const ReposCommand = cmd({
   command: "repos",
-  describe: "マルチリポジトリ Workspace（list / doctor / graph / impact / plan / verify）",
+  describe:
+    "マルチリポジトリ Workspace（list / doctor / status / graph / impact / plan / approve / reject / verify / change-set）",
   builder: (yargs: Argv) =>
     yargs
       .command(ReposListCommand)
       .command(ReposDoctorCommand)
+      .command(ReposStatusCommand)
       .command(ReposGraphCommand)
       .command(ReposImpactCommand)
       .command(ReposPlanCommand)
+      .command(ReposApproveCommand)
+      .command(ReposRejectCommand)
       .command(ReposVerifyCommand)
+      .command(ReposChangeSetCommand)
       .demandCommand(),
   async handler() {},
 })

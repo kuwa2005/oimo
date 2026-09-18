@@ -18,6 +18,8 @@ import type {
   BashInteractiveReplyResponses,
   CommandListResponses,
   Config as Config3,
+  ConfigAutonomyModeErrors,
+  ConfigAutonomyModeResponses,
   ConfigGetResponses,
   ConfigProvidersResponses,
   ConfigUpdateErrors,
@@ -1474,6 +1476,43 @@ export class Config2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).patch<ConfigUpdateResponses, ConfigUpdateErrors, ThrowOnError>({
       url: "/config",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set autonomy mode
+   *
+   * Switch none/normal/fde/special without disposing the instance so in-flight session goals survive. Special enables never-ask, skip-permissions, and promotes goals to execute.
+   */
+  public autonomyMode<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      mode?: "none" | "normal" | "fde" | "special"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "mode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ConfigAutonomyModeResponses, ConfigAutonomyModeErrors, ThrowOnError>({
+      url: "/config/autonomy-mode",
       ...options,
       ...params,
       headers: {
@@ -4916,13 +4955,14 @@ export class Vcs extends HeyApiClient {
   /**
    * Get VCS diff
    *
-   * Retrieve the current git diff for the working tree or against the default branch.
+   * Retrieve the current git diff for the working tree or against the default branch. Optional repositoryId selects a multi-repo workspace member.
    */
   public diff<ThrowOnError extends boolean = false>(
     parameters: {
       directory?: string
       workspace?: string
       mode: "git" | "branch"
+      repositoryId?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -4934,6 +4974,7 @@ export class Vcs extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "query", key: "mode" },
+            { in: "query", key: "repositoryId" },
           ],
         },
       ],

@@ -9,11 +9,17 @@ export const PrCommand = cmd({
   command: "pr <number>",
   describe: "GitHub PR のブランチを取得してチェックアウトし、oimo を実行します",
   builder: (yargs) =>
-    yargs.positional("number", {
-      type: "number",
-      describe: "チェックアウトする PR 番号",
-      demandOption: true,
-    }),
+    yargs
+      .positional("number", {
+        type: "number",
+        describe: "チェックアウトする PR 番号",
+        demandOption: true,
+      })
+      .option("repository", {
+        type: "string",
+        alias: "r",
+        describe: "マルチリポ Workspace 内の対象 Repository id（省略時は primary / Instance.worktree）",
+      }),
   async handler(args) {
     await Instance.provide({
       directory: process.cwd(),
@@ -24,15 +30,34 @@ export const PrCommand = cmd({
           await Log.exit(1)
         }
 
+        let gitCwd = Instance.worktree
+        if (args.repository) {
+          const RepoWorkspace = await import("@/repo-workspace")
+          const info = await RepoWorkspace.Runtime.load(Instance.directory)
+          if (!info) {
+            UI.error("No multi-repo workspace configured; omit --repository or add workspace.yaml / repos.txt")
+            await Log.exit(1)
+            return
+          }
+          try {
+            gitCwd = RepoWorkspace.Git.resolveCwd(info, String(args.repository)).cwd
+          } catch (err) {
+            UI.error(err instanceof Error ? err.message : String(err))
+            await Log.exit(1)
+            return
+          }
+        }
+
         const prNumber = args.number
         const localBranchName = `pr/${prNumber}`
-        UI.println(`Fetching and checking out PR #${prNumber}...`)
+        UI.println(`Fetching and checking out PR #${prNumber} in ${gitCwd}...`)
 
         // Use gh pr checkout with custom branch name
         const result = await Process.run(
           ["gh", "pr", "checkout", `${prNumber}`, "--branch", localBranchName, "--force"],
           {
             nothrow: true,
+            cwd: gitCwd,
           },
         )
 
@@ -69,13 +94,13 @@ export const PrCommand = cmd({
 
               // Check if remote already exists
               const remotes = await AppRuntime.runPromise(
-                Git.Service.use((git) => git.run(["remote"], { cwd: Instance.worktree })),
+                Git.Service.use((git) => git.run(["remote"], { cwd: gitCwd })),
               ).then((x) => x.text().trim())
               if (!remotes.split("\n").includes(remoteName)) {
                 await AppRuntime.runPromise(
                   Git.Service.use((git) =>
                     git.run(["remote", "add", remoteName, `https://github.com/${forkOwner}/${forkName}.git`], {
-                      cwd: Instance.worktree,
+                      cwd: gitCwd,
                     }),
                   ),
                 )
@@ -87,7 +112,7 @@ export const PrCommand = cmd({
               await AppRuntime.runPromise(
                 Git.Service.use((git) =>
                   git.run(["branch", `--set-upstream-to=${remoteName}/${headRefName}`, localBranchName], {
-                    cwd: Instance.worktree,
+                    cwd: gitCwd,
                   }),
                 ),
               )

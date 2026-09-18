@@ -1,5 +1,7 @@
 # oimo マルチリポジトリ実装計画
 
+> **進捗上の注意（2026-09-18）:** 本書末尾の Phase 表示は一部古く、コードには graph / impact / plan / verify の基礎実装が存在する。完全対応に必要な残作業、安全条件、受け入れテストは [completion-instructions.md](./completion-instructions.md) を正本として参照すること。
+
 利用ガイド: [README.md](./README.md) · 設定キー: [config-reference.ja.md](./config-reference.ja.md)
 
 根拠: `docs/oimo-multi-repository-implementation-instructions.md`  

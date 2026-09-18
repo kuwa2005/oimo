@@ -11,6 +11,7 @@ export type EvolveDashboard = {
   reviews: string[]
   historyHead?: string
   skillsCount: number
+  pendingHandoffs: number
 }
 
 /** Parent dir for all projects' self-evolution logs: `~/.oimo/evolve`. */
@@ -80,6 +81,7 @@ export async function loadDashboard(input: { projectID: string; worktree: string
     reviews,
     historyHead,
     skillsCount,
+    pendingHandoffs: briefsOpen.length,
   }
 }
 
@@ -94,11 +96,14 @@ export function formatDashboard(d: EvolveDashboard): string {
     `| Skills (project) | ${d.skillsCount} |`,
     `| Backlog open | ${d.backlogOpen} |`,
     `| Briefs | ${d.briefsOpen.length} |`,
+    `| Pending handoffs | ${d.pendingHandoffs} |`,
     `| Friction reports | ${d.frictionReports.length} |`,
     `| Reviews | ${d.reviews.length} |`,
     ``,
-    `## Open briefs`,
-    ...(d.briefsOpen.length ? d.briefsOpen.slice(0, 12).map((b) => `- ${b}`) : ["- (none)"]),
+    `## Open briefs (human handoff)`,
+    ...(d.briefsOpen.length
+      ? d.briefsOpen.slice(0, 12).map((b) => `- ${b} — pass to external agent; do not auto-apply`)
+      : ["- (none)"]),
     ``,
     `## Recent friction`,
     ...(d.frictionReports.length ? d.frictionReports.slice(0, 5).map((b) => `- ${b}`) : ["- (none)"]),

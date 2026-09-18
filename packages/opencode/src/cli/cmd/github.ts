@@ -260,16 +260,25 @@ export const GithubInstallCommand = cmd({
               throw new UI.CancelledError()
             }
 
+            const repositoryId = process.env["MIMOCODE_REPOSITORY_ID"] || process.env["OIMO_REPOSITORY_ID"]
+            const resolved = await import("@/repo-workspace").then((m) =>
+              m.Git.resolveWorktreeCwd({
+                directory: Instance.directory,
+                repositoryId: repositoryId || undefined,
+                fallbackCwd: Instance.worktree,
+              }),
+            )
+
             // Get repo info
             const info = await AppRuntime.runPromise(
-              Git.Service.use((git) => git.run(["remote", "get-url", "origin"], { cwd: Instance.worktree })),
+              Git.Service.use((git) => git.run(["remote", "get-url", "origin"], { cwd: resolved.cwd })),
             ).then((x) => x.text().trim())
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            return { owner: parsed.owner, repo: parsed.repo, root: Instance.worktree }
+            return { owner: parsed.owner, repo: parsed.repo, root: resolved.cwd, repositoryId: resolved.repositoryId }
           }
 
           async function promptProvider() {
@@ -437,6 +446,11 @@ export const GithubRunCommand = cmd({
       .option("token", {
         type: "string",
         describe: "GitHub パーソナルアクセストークン (github_pat_********)",
+      })
+      .option("repository", {
+        type: "string",
+        alias: "r",
+        describe: "マルチリポ Workspace 内の対象 Repository id",
       }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
@@ -501,22 +515,36 @@ export const GithubRunCommand = cmd({
           ? "pr_review"
           : "issue"
         : undefined
+      const repositoryId =
+        (typeof args.repository === "string" && args.repository) ||
+        process.env["MIMOCODE_REPOSITORY_ID"] ||
+        process.env["OIMO_REPOSITORY_ID"] ||
+        undefined
+      const gitCwd = (
+        await import("@/repo-workspace").then((m) =>
+          m.Git.resolveWorktreeCwd({
+            directory: Instance.directory,
+            repositoryId,
+            fallbackCwd: Instance.worktree,
+          }),
+        )
+      ).cwd
       const gitText = async (args: string[]) => {
-        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
+        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: gitCwd })))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
+        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: gitCwd })))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
       const gitStatus = (args: string[]) =>
-        AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
+        AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: gitCwd })))
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)

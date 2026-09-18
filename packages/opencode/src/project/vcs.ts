@@ -117,6 +117,19 @@ export const Info = z
   .object({
     branch: z.string().optional(),
     default_branch: z.string().optional(),
+    /** Present when a multi-repo workspace is loaded — one entry per registered git repo. */
+    repositories: z
+      .array(
+        z.object({
+          repositoryId: z.string(),
+          root: z.string(),
+          head: z.string().optional(),
+          branch: z.string().optional(),
+          dirty: z.boolean(),
+          remoteNames: z.array(z.string()),
+        }),
+      )
+      .optional(),
   })
   .meta({
     ref: "VcsInfo",
@@ -130,6 +143,8 @@ export const FileDiff = z
     additions: z.number(),
     deletions: z.number(),
     status: z.enum(["added", "deleted", "modified"]).optional(),
+    /** Set when the diff was taken for an explicit multi-repo repository. */
+    repositoryId: z.string().optional(),
   })
   .meta({
     ref: "VcsFileDiff",
@@ -138,9 +153,10 @@ export type FileDiff = z.infer<typeof FileDiff>
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
-  readonly branch: () => Effect.Effect<string | undefined>
-  readonly defaultBranch: () => Effect.Effect<string | undefined>
-  readonly diff: (mode: Mode) => Effect.Effect<FileDiff[]>
+  readonly branch: (repositoryId?: string) => Effect.Effect<string | undefined>
+  readonly defaultBranch: (repositoryId?: string) => Effect.Effect<string | undefined>
+  readonly diff: (mode: Mode, repositoryId?: string) => Effect.Effect<FileDiff[]>
+  readonly repositories: () => Effect.Effect<NonNullable<Info["repositories"]>>
 }
 
 interface State {
@@ -196,25 +212,83 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
       init: Effect.fn("Vcs.init")(function* () {
         yield* InstanceState.get(state).pipe(Effect.forkIn(scope))
       }),
-      branch: Effect.fn("Vcs.branch")(function* () {
+      branch: Effect.fn("Vcs.branch")(function* (repositoryId?: string) {
+        if (repositoryId) {
+          const workspace = yield* Effect.tryPromise(() =>
+            import("@/repo-workspace").then((m) => m.Runtime.current()),
+          ).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (!workspace) return undefined
+          const { Git: RepoGit } = yield* Effect.promise(() => import("@/repo-workspace"))
+          return RepoGit.status(workspace, repositoryId).branch
+        }
         return yield* InstanceState.use(state, (x) => x.current)
       }),
-      defaultBranch: Effect.fn("Vcs.defaultBranch")(function* () {
+      defaultBranch: Effect.fn("Vcs.defaultBranch")(function* (repositoryId?: string) {
+        if (repositoryId) {
+          const workspace = yield* Effect.tryPromise(() =>
+            import("@/repo-workspace").then((m) => m.Runtime.current()),
+          ).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (!workspace) return undefined
+          const { Git: RepoGit } = yield* Effect.promise(() => import("@/repo-workspace"))
+          const cwd = RepoGit.resolveCwd(workspace, repositoryId).cwd
+          return (yield* git.defaultBranch(cwd))?.name
+        }
         return yield* InstanceState.use(state, (x) => x.root?.name)
       }),
-      diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
+      diff: Effect.fn("Vcs.diff")(function* (mode: Mode, repositoryId?: string) {
         const value = yield* InstanceState.get(state)
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
+
+        let cwd = ctx.directory
+        let tag: string | undefined
+        if (repositoryId) {
+          const workspace = yield* Effect.tryPromise(() =>
+            import("@/repo-workspace").then((m) => m.Runtime.current()),
+          ).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (!workspace) return []
+          const { Git: RepoGit } = yield* Effect.promise(() => import("@/repo-workspace"))
+          cwd = RepoGit.resolveCwd(workspace, repositoryId).cwd
+          tag = repositoryId
+        }
+
+        const attach = (rows: FileDiff[]) =>
+          tag ? rows.map((row) => ({ ...row, repositoryId: tag })) : rows
+
         if (mode === "git") {
-          return yield* track(fs, git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined)
+          return attach(yield* track(fs, git, cwd, (yield* git.hasHead(cwd)) ? "HEAD" : undefined))
+        }
+
+        if (repositoryId) {
+          const def = yield* git.defaultBranch(cwd)
+          if (!def) return []
+          const current = yield* git.branch(cwd)
+          if (current && current === def.name) return []
+          const ref = yield* git.mergeBase(cwd, def.ref)
+          if (!ref) return []
+          return attach(yield* compare(fs, git, cwd, ref))
         }
 
         if (!value.root) return []
         if (value.current && value.current === value.root.name) return []
         const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
         if (!ref) return []
-        return yield* compare(fs, git, ctx.directory, ref)
+        return attach(yield* compare(fs, git, ctx.directory, ref))
+      }),
+      repositories: Effect.fn("Vcs.repositories")(function* () {
+        const workspace = yield* Effect.tryPromise(() =>
+          import("@/repo-workspace").then((m) => m.Runtime.current()),
+        ).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!workspace) return []
+        const { Git: RepoGit } = yield* Effect.promise(() => import("@/repo-workspace"))
+        return RepoGit.statusAll(workspace).map((row) => ({
+          repositoryId: row.repositoryId,
+          root: row.root,
+          head: row.head,
+          branch: row.branch,
+          dirty: row.dirty,
+          remoteNames: row.remoteNames,
+        }))
       }),
     })
   }),

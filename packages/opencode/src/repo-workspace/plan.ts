@@ -1,6 +1,19 @@
 import type { Info } from "./schema"
 import type { ImpactReport } from "./graph/types"
-import { approvePlan, createChangeSet, createPlan, formatPlan, type ChangeSet, type CrossRepoPlan } from "./change-set"
+import {
+  approvePlan,
+  createChangeSet,
+  createPlan,
+  formatPlan,
+  finalizeChangeSet,
+  loadChangeSet,
+  saveChangeSet,
+  type ChangeSet,
+  type CrossRepoPlan,
+} from "./change-set"
+import { buildApprovalFingerprint, workspaceFingerprintKey } from "./session-fingerprint"
+import * as DirtyBaseline from "./dirty-baseline"
+import * as Scope from "./scope"
 
 /**
  * Build a cross-repo plan from an impact report.
@@ -58,16 +71,59 @@ export function beginChangeSet(input: {
 }): { plan: CrossRepoPlan; changeSet: ChangeSet; logLine: string } {
   const plan = input.autoApprove ? approvePlan(input.plan, "auto") : input.plan
   const scope = executionScopeFromPlan(plan, input.info)
+  const approvalFingerprint = plan.approvedAt
+    ? buildApprovalFingerprint(input.info, plan.graphFingerprint)
+    : undefined
   const changeSet = createChangeSet({
     sessionID: input.sessionID,
     plan,
     executionScope: scope,
+    workspaceFingerprint: workspaceFingerprintKey(input.info),
+    approvalFingerprint,
+    kind: "customer",
   })
+  if (plan.approvedAt) {
+    DirtyBaseline.captureBaseline(input.sessionID, input.info, scope)
+  }
   const logLine = [
     input.autoApprove ? "[auto] approved cross-repo plan" : "[pending] cross-repo plan",
     formatPlan(plan),
   ].join("\n")
   return { plan, changeSet, logLine }
+}
+
+export function approveExistingChangeSet(input: {
+  sessionID: string
+  info: Info
+  by?: "user" | "auto"
+}): ChangeSet {
+  const cs = loadChangeSet(input.sessionID)
+  if (!cs) throw new Error(`No Change set for session ${input.sessionID}`)
+  if (cs.status !== "planned") {
+    throw new Error(`Change set ${cs.id} is ${cs.status}; only planned sets can be approved`)
+  }
+  const plan = approvePlan(cs.plan, input.by ?? "user")
+  const approvalFingerprint = buildApprovalFingerprint(input.info, plan.graphFingerprint)
+  const next = {
+    ...cs,
+    plan,
+    status: "approved" as const,
+    approvalFingerprint,
+    updatedAt: new Date().toISOString(),
+  }
+  saveChangeSet(next)
+  Scope.setScope(input.sessionID, next.executionScope)
+  DirtyBaseline.captureBaseline(input.sessionID, input.info, next.executionScope)
+  return next
+}
+
+export function rejectChangeSet(sessionID: string): ChangeSet {
+  const cs = loadChangeSet(sessionID)
+  if (!cs) throw new Error(`No Change set for session ${sessionID}`)
+  const next = finalizeChangeSet(cs, "cancelled")
+  saveChangeSet(next)
+  Scope.clearScope(sessionID)
+  return next
 }
 
 export function requiresPlan(info: Info, targetRepoIds: string[]): boolean {

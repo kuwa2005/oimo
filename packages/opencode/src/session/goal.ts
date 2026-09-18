@@ -55,6 +55,11 @@ export type Goal = {
   /** hearing = clarify with user; execute = never-ask non-stop delivery. */
   phase: GoalPhase
   stopReason?: GoalStopReason
+  /** Multi-repo binding — required together for safe resume. */
+  workspaceFingerprint?: string
+  changeSetID?: string
+  executionScope?: string[]
+  evidenceManifestPath?: string
 }
 
 export const Verdict = z.object({
@@ -126,6 +131,10 @@ export type SetGoalInput = {
   autonomous?: boolean
   phase?: GoalPhase
   limits?: ConfigAutonomy.Limits
+  workspaceFingerprint?: string
+  changeSetID?: string
+  executionScope?: string[]
+  evidenceManifestPath?: string
 }
 
 export interface Interface {
@@ -217,6 +226,23 @@ export const layer = Layer.effect(
       const phase =
         input.phase ?? (autonomous && ConfigAutonomy.hearingFirst(cfg.autonomy) ? "hearing" : "execute")
       const data = yield* InstanceState.get(state)
+
+      // Bind live multi-repo state when a workspace is active so Goal / Change set / scope resume together.
+      const binding = yield* Effect.tryPromise(async () => {
+        const { Runtime, ChangeSet, Scope, SessionFingerprint } = await import("@/repo-workspace")
+        const info = await Runtime.current()
+        if (!info) return undefined
+        const cs = ChangeSet.loadChangeSet(sessionID)
+        const scope = Scope.getScope(sessionID)
+        return {
+          workspaceFingerprint:
+            input.workspaceFingerprint ?? SessionFingerprint.workspaceFingerprintKey(info),
+          changeSetID: input.changeSetID ?? cs?.id,
+          executionScope: input.executionScope ?? (scope ? [...scope] : cs?.executionScope),
+          evidenceManifestPath: input.evidenceManifestPath,
+        }
+      }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+
       const goal: Goal = {
         condition: input.condition,
         react: 0,
@@ -230,8 +256,16 @@ export const layer = Layer.effect(
         judgeFailures: 0,
         autonomous,
         phase,
+        workspaceFingerprint: binding?.workspaceFingerprint ?? input.workspaceFingerprint,
+        changeSetID: binding?.changeSetID ?? input.changeSetID,
+        executionScope: binding?.executionScope ?? input.executionScope,
+        evidenceManifestPath: binding?.evidenceManifestPath ?? input.evidenceManifestPath,
       }
       data.goals.set(sessionID, goal)
+      yield* Effect.tryPromise(async () => {
+        const { persistGoalBinding } = await import("@/repo-workspace/goal-binding")
+        await persistGoalBinding(sessionID, goal)
+      }).pipe(Effect.catch(() => Effect.void))
       yield* elog.info("goal set", {
         sessionID,
         condition: input.condition,
@@ -388,6 +422,22 @@ export const layer = Layer.effect(
       model: { providerID: ProviderID; modelID: ModelID }
       sessionID: SessionID
     }) {
+      // Multi-repo completion Goals bind an evidence manifest. Fail closed if the
+      // manifest still says IN PROGRESS or lists unfinished release blockers —
+      // transcript optimism must not override the written audit.
+      {
+        const data = yield* InstanceState.get(state)
+        const bound = data.goals.get(input.sessionID)
+        const manifest = bound?.evidenceManifestPath
+        if (manifest) {
+          const { assertEvidenceAllowsComplete } = yield* Effect.promise(() => import("@/repo-workspace/evidence-judge"))
+          const gate = assertEvidenceAllowsComplete(manifest)
+          if (!gate.ok) {
+            return { ok: false, reason: gate.reason } satisfies Verdict
+          }
+        }
+      }
+
       const cfg = yield* config.get()
       // Prefer the last concrete assistant upstream (Auto Model rewrites
       // providerID/modelID on the assistant message). Fall back to the caller's

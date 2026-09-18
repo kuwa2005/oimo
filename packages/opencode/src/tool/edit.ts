@@ -101,6 +101,15 @@ export const EditTool = Tool.define(
                   diff,
                 })
                 yield* afs.writeWithDirs(filePath, params.new_string)
+                yield* Effect.tryPromise(() =>
+                  import("@/repo-workspace").then((m) =>
+                    m.RecordMutation.recordMutation({
+                      sessionID: ctx.sessionID,
+                      absolutePath: filePath,
+                      action: existed ? "modify" : "create",
+                    }),
+                  ),
+                ).pipe(Effect.catch(() => Effect.void))
                 yield* format.file(filePath)
                 yield* bus.publish(File.Event.Edited, { file: filePath })
                 yield* bus.publish(FileWatcher.Event.Updated, {
@@ -135,6 +144,15 @@ export const EditTool = Tool.define(
               })
 
               yield* afs.writeWithDirs(filePath, contentNew)
+              yield* Effect.tryPromise(() =>
+                import("@/repo-workspace").then((m) =>
+                  m.RecordMutation.recordMutation({
+                    sessionID: ctx.sessionID,
+                    absolutePath: filePath,
+                    action: "modify",
+                  }),
+                ),
+              ).pipe(Effect.catch(() => Effect.void))
               yield* format.file(filePath)
               yield* bus.publish(File.Event.Edited, { file: filePath })
               yield* bus.publish(FileWatcher.Event.Updated, {
@@ -188,7 +206,7 @@ export const EditTool = Tool.define(
             title: `${path.relative(Instance.worktree, filePath)}`,
             output,
           }
-        }),
+        }).pipe(Effect.orDie),
     }
   }),
 )

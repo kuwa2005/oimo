@@ -17,7 +17,7 @@ import type { SessionID } from "@/session/schema"
 import type { ProviderID, ModelID } from "@/provider/schema"
 import { parseMeta } from "./meta"
 import { evalScript, type HostFn } from "./sandbox"
-import { makeFileHooks, resolveInWorkspace } from "./workspace"
+import { makeFileHooks, makeFileHooksForRoots, resolveInWorkspace } from "./workspace"
 import { isInlineScript, resolveWorkflowScript } from "./resolve"
 import { WorkflowAgentFailed, WorkflowChildFailed, WorkflowFinished, WorkflowLog, WorkflowPhase, WorkflowStarted } from "./events"
 import { WorkflowPersistence, journalKeyBase } from "./persistence"
@@ -535,7 +535,20 @@ export const layer = Layer.effect(
       // worktree. Captured in the closure so the file hooks read it synchronously
       // and never touch ALS from inside the forked work fiber.
       const workspaceRoot = input.workspace ?? Instance.worktree
-      const fileHooks = makeFileHooks(workspaceRoot)
+      const allowedRoots = yield* Effect.tryPromise(async () => {
+        const { Runtime, Scope } = await import("@/repo-workspace")
+        const info = await Runtime.current()
+        if (!info) return [workspaceRoot]
+        const scope = Scope.getScope(input.sessionID)
+        const ids = scope?.size ? [...scope] : [...info.repositories.keys()]
+        return ids
+          .map((id) => info.repositories.get(id)?.canonicalPath)
+          .filter((p): p is string => Boolean(p))
+      }).pipe(Effect.catch(() => Effect.succeed([workspaceRoot])))
+      const fileHooks =
+        allowedRoots.length > 1
+          ? makeFileHooksForRoots(allowedRoots, { sessionID: input.sessionID })
+          : makeFileHooks(workspaceRoot, { sessionID: input.sessionID })
       const deferred = yield* Deferred.make<RunOutcome>()
       const entry: RunEntry = {
         runID,

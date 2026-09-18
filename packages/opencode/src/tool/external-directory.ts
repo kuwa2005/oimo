@@ -12,7 +12,7 @@ import { assertMemoryWriteAllowed, assertAgentWriteSandbox } from "./memory-path
 import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import * as ConfigReliability from "@/config/reliability"
 import * as Scope from "@/reliability/scope"
-import { Runtime as RepoWorkspaceRuntime, resolveWrite, Scope as RepoScope, ChangeSet as RepoChangeSet } from "@/repo-workspace"
+import { Runtime as RepoWorkspaceRuntime, Policy as RepoPolicy, DirtyBaseline } from "@/repo-workspace"
 
 type Kind = "file" | "directory"
 
@@ -127,41 +127,29 @@ export const assertWriteAllowed = Effect.fn("Tool.assertWriteAllowed")(function*
   yield* assertExternalDirectoryEffect(ctx, target, options)
   if (!target) return
 
-  // When a multi-repo workspace is loaded, enforce registry access (read-only /
-  // unregistered deny). Fail open if load fails so single-repo sessions stay usable.
-  const workspace = yield* Effect.tryPromise(() => RepoWorkspaceRuntime.current()).pipe(
-    Effect.catch(() => Effect.succeed(undefined)),
-  )
+  const workspace = yield* Effect.tryPromise(async () => {
+    try {
+      return await RepoWorkspaceRuntime.currentStrict()
+    } catch (err) {
+      if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "load_failed") {
+        throw err
+      }
+      return undefined
+    }
+  })
   if (workspace) {
     const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : AppFileSystem.resolve(target)
-    const hit = resolveWrite(workspace, { absolutePath: full })
+    const hit = RepoPolicy.decideWrite(workspace, ctx.sessionID, { absolutePath: full })
     if (!hit.ok) {
-      if (!(hit.code === "unregistered" && workspace.defaults.allowUnregisteredWrites)) {
-        throw new Error(`repo-workspace write denied (${hit.code}): ${hit.message}`)
-      }
-    } else {
-      // Active execution scope (set after cross-repo plan approval) further restricts writes.
-      const scope = RepoScope.getScope(ctx.sessionID)
-      const cs = RepoChangeSet.loadChangeSet(ctx.sessionID)
-      const activeScope = scope ?? (cs && cs.status !== "cancelled" && cs.status !== "planned" ? new Set(cs.executionScope) : undefined)
-      if (activeScope && activeScope.size > 0 && !activeScope.has(hit.repository.id)) {
-        throw new Error(
-          `repo-workspace write denied (outside_scope): "${hit.repository.id}" is not in execution scope [${[...activeScope].join(", ")}]`,
-        )
-      }
-      // Multi-repo write to non-primary without approved plan when requireCrossRepoPlan.
-      if (
-        workspace.defaults.requireCrossRepoPlan &&
-        hit.repository.id !== workspace.primaryRepositoryId &&
-        (!cs || !cs.plan.approvedAt)
-      ) {
-        const hasScope = activeScope && activeScope.has(hit.repository.id)
-        if (!hasScope) {
-          throw new Error(
-            `repo-workspace write denied (plan_required): cross-repo write to "${hit.repository.id}" needs an approved change plan (oimo repos plan / impact)`,
-          )
-        }
-      }
+      throw new Error(`repo-workspace write denied (${hit.code}): ${hit.message}`)
+    }
+    const baseline = DirtyBaseline.assertNotTouchingBaseline(
+      ctx.sessionID,
+      hit.repository.id,
+      hit.location.relativePath,
+    )
+    if (!baseline.ok) {
+      throw new Error(`repo-workspace write denied (preexisting_dirty): ${baseline.message}`)
     }
   }
 
@@ -182,7 +170,7 @@ export const assertWriteAllowed = Effect.fn("Tool.assertWriteAllowed")(function*
 
   // System-agent write sandbox: checkpoint-writer is memory-only, while
   // dream/distill/evolve may also write <worktree>/.oimo and evolve may write
-  // ~/.oimo/evolve/<projectID>/.
+  // ~/.oimo/evolve/<projectID>/. Then apply project-scoped evolve Policy.
   assertAgentWriteSandbox({
     target,
     agentName: ctx.agent,
@@ -190,6 +178,20 @@ export const assertWriteAllowed = Effect.fn("Tool.assertWriteAllowed")(function*
     worktree,
     evolveHome: path.join(Global.Path.home, ".oimo", "evolve"),
   })
+
+  if (ctx.agent === "dream" || ctx.agent === "distill" || ctx.agent === "evolve") {
+    const { decideEvolveWrite } = yield* Effect.promise(() => import("@/evolve/write-policy"))
+    const track = ctx.agent === "dream" ? "dream" : ctx.agent === "distill" ? "distill" : "evolve"
+    const hit = decideEvolveWrite({
+      projectID: String(projectID),
+      worktree,
+      absolutePath: target,
+      track,
+    })
+    if (!hit.ok) {
+      throw new Error(`evolve write denied (${hit.code}): ${hit.message}`)
+    }
+  }
 
   assertMemoryWriteAllowed({
     target,
@@ -234,4 +236,35 @@ export const askEditUnlessMemory = Effect.fn("Tool.askEditUnlessMemory")(functio
     always: ["*"],
     metadata: { filepath, diff: input.diff, ...(input.files !== undefined ? { files: input.files } : {}) },
   })
+})
+
+/**
+ * Read gate for multi-repo: deny unregistered paths unless allow_unregistered_reads.
+ */
+export const assertReadAllowed = Effect.fn("Tool.assertReadAllowed")(function* (
+  ctx: Tool.Context,
+  target: string,
+  options?: Options & { repositoryId?: string },
+) {
+  yield* assertExternalDirectoryEffect(ctx, target, options)
+  const workspace = yield* Effect.tryPromise(async () => {
+    try {
+      return await RepoWorkspaceRuntime.currentStrict()
+    } catch (err) {
+      if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "load_failed") {
+        throw err
+      }
+      return undefined
+    }
+  })
+  if (!workspace) return
+  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : AppFileSystem.resolve(target)
+  const hit =
+    options?.repositoryId && !path.isAbsolute(target)
+      ? RepoPolicy.decideRead(workspace, { repositoryId: options.repositoryId, path: target })
+      : RepoPolicy.decideRead(workspace, { absolutePath: full })
+  if (!hit.ok) {
+    if (hit.code === "unregistered" && workspace.defaults.allowUnregisteredReads) return
+    throw new Error(`repo-workspace read denied (${hit.code}): ${hit.message}`)
+  }
 })

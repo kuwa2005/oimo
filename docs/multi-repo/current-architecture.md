@@ -110,7 +110,7 @@
 | `SessionTable.directory` | DB | 記録されるが、再開時に cwd を自動切替しない（TUI `-c` は現 Instance のまま） |
 | control-plane `workspace_id` | DB + `control-plane/workspace.ts` `sessionRestore` | 別 Workspace なら set + re-bootstrap |
 | `SessionCwd` | なし | プロセス再起動で消失 |
-| multi-repo registry / change set | なし | **未実装** |
+| multi-repo registry / change set | `repo-workspace/session-fingerprint.ts` + SQLite `repo_workspace_state` | 指紋はファイル、Change set / scope は DB。`Session.get` で `Runtime.restoreSession` |
 
 ---
 
@@ -201,19 +201,38 @@ Git 境界は既に「1 checkout」。疑似単一リポ化はしていない（
 
 ---
 
-## 12. ギャップ（指示書要件との差分）
+## 12. ギャップ（指示書要件との差分）— 2026-09-18 更新
+
+正本の完了条件: [completion-instructions.md](./completion-instructions.md)  
+証跡: [completion-evidence.md](./completion-evidence.md)（正式対応範囲で **COMPLETE**）
 
 | 要件 | 現状 |
 |------|------|
-| Workspace 登録・復元 | なし（control-plane Workspace は別物） |
-| Repository Resolver | なし（Instance.containsPath のみ） |
-| 横断検索（repo-id 付き） | なし（単一 root + external_directory） |
-| Dependency graph | なし |
-| Cross-repo change plan / Change set | なし |
-| Execution scope / read-only 強制 | access 次元なし |
-| Repo 別検証集約 | なし（bash 任せ） |
-| skills multi-repo capability | なし（暗黙 single-repo） |
-| TUI Workspace 表示 | なし |
+| Workspace 登録・復元 | **実装済み** |
+| Repository Resolver / Policy | **実装済み** |
+| 横断検索（repo-id 付き） | **grep / glob / read / view-image / LSP** |
+| Dependency graph | **部分拡張可**（主要検出器あり） |
+| Cross-repo change plan / Change set | **実装済み** |
+| Execution scope / read-only 強制 | **file + shell + workflow Policy + ShellJail** |
+| Repo 別検証集約 | **実装済み**（package.json 中心 + dependency_failed） |
+| skills multi-repo capability | **実装済み** |
+| TUI Workspace 表示 | **実装済み**（approve/reject + session 紐付け） |
+| Repository-aware Git / PR | **実装済み** |
+| workflow / evolve / Goal 統合 | **実装済み**（正式除外は README） |
+| クロスプラットフォーム境界テスト | **Linux/WSL2 正式**；macOS/Win 除外 |
+
+---
+
+## 14. 実装棚卸し（コードリンク）
+
+| 領域 | 主なパス | 状態 |
+|------|----------|------|
+| Policy | `packages/opencode/src/repo-workspace/policy.ts` | 中核（annotatePaths 含む） |
+| EvidenceJudge | `repo-workspace/evidence-judge.ts` | Goal.evaluate ゲート |
+| Change set DB | `repo-workspace.sql.ts` + migration `20260918000000_*` | 永続化 |
+| read / glob / bash / lsp | `tool/*.ts` | `repositoryId(s)` + Policy |
+| Git facade | `repo-workspace/git.ts` + `project/vcs.ts` | Repository-aware |
+| テスト | `test/repo-workspace/*.test.ts` | adversarial / E2E / LSP live / EvidenceJudge |
 
 ---
 

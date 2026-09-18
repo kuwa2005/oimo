@@ -53,13 +53,40 @@ function handle(raw) {
     return
   }
   if (data.method === "initialize") {
-    send({ jsonrpc: "2.0", id: data.id, result: { capabilities: {} } })
+    send({
+      jsonrpc: "2.0",
+      id: data.id,
+      result: {
+        capabilities: {
+          definitionProvider: true,
+          referencesProvider: true,
+        },
+      },
+    })
     return
   }
   if (data.method === "initialized") {
     return
   }
   if (data.method === "workspace/didChangeConfiguration") {
+    return
+  }
+  if (data.method === "textDocument/definition" || data.method === "textDocument/references") {
+    const target = process.env.FAKE_LSP_DEFINITION_URI
+    const loc = target
+      ? {
+          uri: target,
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 3 },
+          },
+        }
+      : null
+    send({
+      jsonrpc: "2.0",
+      id: data.id,
+      result: data.method === "textDocument/references" ? (loc ? [loc] : []) : loc,
+    })
     return
   }
   if (data.method === "test/trigger") {

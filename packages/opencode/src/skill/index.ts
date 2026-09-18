@@ -39,12 +39,41 @@ export const Info = z.object({
   // where `deny` means unusable by anyone.
   disable_model_invocation: z.boolean().optional(),
   bundled: z.boolean().optional(),
+  /** Multi-repo capability. Missing → treated as single-repo (safe default). */
+  capability: z
+    .enum(["single-repo", "multi-repo-read", "multi-repo-write", "workspace-read-only"])
+    .optional(),
 })
 export type Info = z.infer<typeof Info>
 
+export type SkillCapability = NonNullable<Info["capability"]>
+
+/** Resolve capability; unknown / missing skills default to single-repo. */
+export function resolveCapability(skill: Pick<Info, "capability">): SkillCapability {
+  return skill.capability ?? "single-repo"
+}
+
+export function assertSkillAllowedForWorkspace(
+  skill: Pick<Info, "name" | "capability">,
+  opts: { multiRepo: boolean; needsWrite: boolean },
+) {
+  const cap = resolveCapability(skill)
+  if (!opts.multiRepo) return
+  // Loading a single-repo skill's prompt is allowed; write-capable multi-repo
+  // operations require an explicit multi-repo-* capability.
+  if (opts.needsWrite && cap === "single-repo") {
+    throw new Error(
+      `Skill "${skill.name}" is single-repo only; it cannot perform multi-repo writes`,
+    )
+  }
+  if (opts.needsWrite && (cap === "multi-repo-read" || cap === "workspace-read-only")) {
+    throw new Error(`Skill "${skill.name}" capability "${cap}" does not allow multi-repo writes`)
+  }
+}
+
 // Kebab-case in frontmatter to match Claude Code and the agentskills.io open
 // standard, so a skill folder stays portable in both directions.
-const Frontmatter = Info.pick({ name: true, description: true, aliases: true }).extend({
+const Frontmatter = Info.pick({ name: true, description: true, aliases: true, capability: true }).extend({
   "disable-model-invocation": z.boolean().optional(),
 })
 

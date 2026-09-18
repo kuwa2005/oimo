@@ -150,17 +150,23 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
       async (c) =>
         jsonRequest("InstanceRoutes.vcs.get", c, function* () {
           const vcs = yield* Vcs.Service
-          const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
-            concurrency: 2,
-          })
-          return { branch, default_branch }
+          const [branch, default_branch, repositories] = yield* Effect.all(
+            [vcs.branch(), vcs.defaultBranch(), vcs.repositories()],
+            { concurrency: 3 },
+          )
+          return {
+            branch,
+            default_branch,
+            ...(repositories.length ? { repositories } : {}),
+          }
         }),
     )
     .get(
       "/vcs/diff",
       describeRoute({
         summary: "Get VCS diff",
-        description: "Retrieve the current git diff for the working tree or against the default branch.",
+        description:
+          "Retrieve the current git diff for the working tree or against the default branch. Optional repositoryId selects a multi-repo workspace member.",
         operationId: "vcs.diff",
         responses: {
           200: {
@@ -177,12 +183,14 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
         "query",
         z.object({
           mode: Vcs.Mode,
+          repositoryId: z.string().optional(),
         }),
       ),
       async (c) =>
         jsonRequest("InstanceRoutes.vcs.diff", c, function* () {
           const vcs = yield* Vcs.Service
-          return yield* vcs.diff(c.req.valid("query").mode)
+          const q = c.req.valid("query")
+          return yield* vcs.diff(q.mode, q.repositoryId)
         }),
     )
     .get(

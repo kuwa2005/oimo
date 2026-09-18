@@ -1,5 +1,6 @@
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import * as Stream from "effect/Stream"
 import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import { Ripgrep } from "@/file/ripgrep"
 import type { Info } from "./schema"
@@ -68,4 +69,72 @@ export function formatMatches(matches: CrossMatch[]) {
         `${formatLocation({ repositoryId: m.repositoryId, relativePath: m.relativePath })}:${m.line}: ${m.text.trimEnd()}`,
     )
     .join("\n")
+}
+
+export type CrossGlobHit = {
+  repositoryId: string
+  relativePath: string
+  absolutePath: string
+  mtime: number
+}
+
+/**
+ * Glob across explicitly listed repositories. Callers must pass repositoryIds
+ * (never implied all).
+ */
+export function globAcross(
+  info: Info,
+  input: {
+    pattern: string
+    repositoryIds: string[]
+    signal?: AbortSignal
+    limit?: number
+  },
+) {
+  return Effect.gen(function* () {
+    const rg = yield* Ripgrep.Service
+    const fs = yield* AppFileSystem.Service
+    const limit = input.limit ?? 100
+    const hits: CrossGlobHit[] = []
+
+    for (const id of input.repositoryIds) {
+      if (hits.length >= limit) break
+      const repo = rootOf(info, id)
+      const files = yield* rg.files({ cwd: repo.canonicalPath, glob: [input.pattern], signal: input.signal }).pipe(
+        Stream.mapEffect((file) =>
+          Effect.gen(function* () {
+            const absolutePath = AppFileSystem.resolve(
+              path.isAbsolute(file) ? file : path.join(repo.canonicalPath, file),
+            )
+            const hit = locate(info, absolutePath)
+            if (!hit || hit.repository.id !== id) return
+            const st = yield* fs.stat(absolutePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const mtime =
+              st?.mtime.pipe(
+                Option.map((date) => date.getTime()),
+                Option.getOrElse(() => 0),
+              ) ?? 0
+            hits.push({
+              repositoryId: id,
+              relativePath: hit.location.relativePath,
+              absolutePath,
+              mtime,
+            })
+          }),
+        ),
+        Stream.take(limit - hits.length + 1),
+        Stream.runDrain,
+      )
+      void files
+    }
+
+    const truncated = hits.length > limit
+    if (truncated) hits.length = limit
+    hits.sort((a, b) => b.mtime - a.mtime)
+    return { hits, truncated }
+  })
+}
+
+export function formatGlobHits(hits: CrossGlobHit[]) {
+  return hits.map((h) => formatLocation({ repositoryId: h.repositoryId, relativePath: h.relativePath })).join("\n")
 }

@@ -111,10 +111,16 @@ const GIT_DESTRUCTIVE = new Map<string, Set<string>>([
 const Parameters = z.object({
   command: z.string().describe("The command to execute"),
   timeout: z.number().describe("Optional timeout in milliseconds").optional(),
+  repositoryId: z
+    .string()
+    .optional()
+    .describe(
+      "When a multi-repo workspace is configured: repository id whose root (or workdir) is the cwd. Omit for primary / SessionCwd.",
+    ),
   workdir: z
     .string()
     .describe(
-      `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
+      `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands. When repositoryId is set, relative paths are resolved inside that repository.`,
     )
     .optional(),
   interactive: z
@@ -417,7 +423,23 @@ const askDelete = Effect.fn("BashTool.askDelete")(function* (ctx: Tool.Context, 
   })
 })
 
-function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+function cmd(
+  shell: string,
+  name: string,
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  jail?: { mode: "bwrap"; argv: string[]; binary: string },
+) {
+  if (jail?.mode === "bwrap") {
+    return ChildProcess.make(jail.binary, jail.argv, {
+      cwd,
+      env,
+      stdin: "ignore",
+      detached: false,
+    })
+  }
+
   if (process.platform === "win32" && PS.has(name)) {
     const prefixed = `${Shell.POWERSHELL_UTF8_PREFIX}${command}`
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", prefixed], {
@@ -634,6 +656,7 @@ export const BashTool = Tool.define(
         env: NodeJS.ProcessEnv
         timeout: number
         description: string
+        jail?: { mode: "bwrap"; argv: string[]; binary: string }
       },
       ctx: Tool.Context,
     ) {
@@ -659,7 +682,9 @@ export const BashTool = Tool.define(
 
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
+          const handle = yield* spawner.spawn(
+            cmd(input.shell, input.name, input.command, input.cwd, input.env, input.jail),
+          )
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
@@ -864,9 +889,93 @@ export const BashTool = Tool.define(
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
               const effectiveCwd = SessionCwd.get(ctx.sessionID)
-              const cwd = params.workdir
+              let cwd = params.workdir
                 ? yield* resolvePath(params.workdir, effectiveCwd, shell)
                 : effectiveCwd
+              let repoShellJail: { mode: "bwrap"; argv: string[]; binary: string } | undefined
+
+              if (params.repositoryId) {
+                const { Runtime, Policy } = yield* Effect.promise(() => import("@/repo-workspace"))
+                const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+                  Effect.catch(() => Effect.succeed(undefined)),
+                )
+                if (!workspace) {
+                  throw new Error(
+                    "No multi-repo workspace loaded; omit repositoryId or configure repos.txt / workspace.yaml",
+                  )
+                }
+                const decision = Policy.decideCommand(workspace, ctx.sessionID, {
+                  repositoryId: params.repositoryId,
+                  workdir: params.workdir,
+                  mutating: true,
+                })
+                if (!decision.ok) {
+                  throw new Error(`repo-workspace shell denied (${decision.code}): ${decision.message}`)
+                }
+                cwd = decision.cwd
+              } else {
+                const { Runtime, Policy } = yield* Effect.promise(() => import("@/repo-workspace"))
+                const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+                  Effect.catch(() => Effect.succeed(undefined)),
+                )
+                if (workspace) {
+                  const decision = Policy.decideCommand(workspace, ctx.sessionID, {
+                    workdir: cwd,
+                    mutating: true,
+                  })
+                  if (!decision.ok) {
+                    throw new Error(`repo-workspace shell denied (${decision.code}): ${decision.message}`)
+                  }
+                }
+              }
+
+              // Evolve / dream / distill agents: refuse shell writes into product source.
+              if (ctx.agent === "dream" || ctx.agent === "distill" || ctx.agent === "evolve") {
+                const { decideEvolveWrite } = yield* Effect.promise(() => import("@/evolve/write-policy"))
+                const { Instance } = yield* Effect.promise(() => import("@/project/instance"))
+                const mutatingShell =
+                  /\b(rm|mv|cp|tee|install|sed\s+-i|truncate|dd)\b|[>]\s*\S+|git\s+(commit|add|push|reset|checkout)\b/i.test(
+                    params.command,
+                  )
+                if (mutatingShell) {
+                  if (/\bgit\s+(commit|add|push|reset|checkout|merge|rebase|am)\b/i.test(params.command)) {
+                    throw new Error(
+                      "evolve shell denied: git mutation of product/worktree is forbidden for dream/distill/evolve agents",
+                    )
+                  }
+                  const absTokens = params.command.match(/\/[\w./-]+/g) ?? []
+                  const relTokens =
+                    params.command.match(/(?:^|[\s;|&>])((?:\.\/)?[\w./-]+\.(?:ts|tsx|js|jsx|json|md|py|go|rs))\b/gi) ??
+                    []
+                  const candidates = [
+                    ...absTokens,
+                    ...relTokens.map((t) => t.replace(/^[;|&>\s]+/, "").trim()),
+                  ]
+                  for (const tok of candidates) {
+                    if (!tok || tok.includes("*")) continue
+                    const absolutePath = path.isAbsolute(tok) ? tok : path.resolve(cwd, tok)
+                    const hit = decideEvolveWrite({
+                      projectID: String(Instance.project.id),
+                      worktree: Instance.worktree,
+                      absolutePath,
+                      track: ctx.agent === "dream" ? "dream" : ctx.agent === "distill" ? "distill" : "evolve",
+                    })
+                    if (!hit.ok) {
+                      throw new Error(`evolve shell denied (${hit.code}): ${hit.message}`)
+                    }
+                  }
+                  // Bare redirects to relative product paths under worktree (not .oimo)
+                  if (
+                    /(^|[\s;|&])(>|{1,2})\s*(?!.*\.oimo)([\w./-]+\.(ts|tsx|js|json|md))\b/i.test(params.command) &&
+                    !params.command.includes(".oimo/") &&
+                    !params.command.includes("/.oimo/evolve/")
+                  ) {
+                    throw new Error(
+                      "evolve shell denied: writing product source via shell redirects is forbidden for dream/distill/evolve agents",
+                    )
+                  }
+                }
+              }
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
@@ -902,6 +1011,73 @@ export const BashTool = Tool.define(
               }
               const scan = yield* collect(root, cwd, ps, shell)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
+
+              // Multi-repo: every touched path and git -C target must pass Policy.
+              {
+                const { Runtime, Policy, Git } = yield* Effect.promise(() => import("@/repo-workspace"))
+                const workspace = yield* Effect.tryPromise(() => Runtime.current()).pipe(
+                  Effect.catch(() => Effect.succeed(undefined)),
+                )
+                if (workspace) {
+                  for (const dir of scan.dirs) {
+                    const hit = Policy.decideWrite(workspace, ctx.sessionID, { absolutePath: dir })
+                    if (!hit.ok && hit.code !== "unregistered") {
+                      // read-only / outside_scope / stale always deny for shell dirs
+                      throw new Error(`repo-workspace shell denied (${hit.code}): ${hit.message}`)
+                    }
+                    if (!hit.ok && hit.code === "unregistered" && !workspace.defaults.allowUnregisteredWrites) {
+                      throw new Error(`repo-workspace shell denied (${hit.code}): ${hit.message}`)
+                    }
+                  }
+                  // Reject git -C / --git-dir / --work-tree pointing outside scope.
+                  const tokens = params.command.split(/\s+/)
+                  for (let i = 0; i < tokens.length; i++) {
+                    const t = tokens[i]
+                    if (t === "-C" || t === "--git-dir" || t === "--work-tree") {
+                      const target = tokens[i + 1]
+                      if (!target) continue
+                      const abs = path.isAbsolute(target) ? target : path.resolve(cwd, target)
+                      const hit = Policy.decideWrite(workspace, ctx.sessionID, { absolutePath: abs })
+                      if (!hit.ok) {
+                        throw new Error(`repo-workspace git path denied (${hit.code}): ${hit.message}`)
+                      }
+                    }
+                  }
+                  Git.assertSafeGitArgs(tokens)
+
+                  // OS filesystem jail when bubblewrap is available; otherwise refuse
+                  // opaque write vectors that were not fully covered by Policy path scans.
+                  const { ShellJail, Scope, ChangeSet } = yield* Effect.promise(() => import("@/repo-workspace"))
+                  const scope = Scope.getScope(ctx.sessionID)
+                  const cs = ChangeSet.loadChangeSet(ctx.sessionID)
+                  const writableIds =
+                    scope && scope.size > 0
+                      ? [...scope]
+                      : cs?.executionScope?.length
+                        ? cs.executionScope
+                        : [workspace.primaryRepositoryId]
+                  const writableRoots = writableIds
+                    .map((id) => workspace.repositories.get(id)?.canonicalPath)
+                    .filter((p): p is string => Boolean(p))
+                  const jail = ShellJail.planJail({
+                    shell,
+                    command: params.command,
+                    cwd,
+                    writableRoots,
+                  })
+                  const covered = scan.dirs.size > 0
+                  const safe = ShellJail.assertPolicyOnlySafe({
+                    command: params.command,
+                    pathCovered: covered,
+                    jail,
+                  })
+                  if (!safe.ok) throw new Error(safe.message)
+                  if (jail.mode === "bwrap") {
+                    repoShellJail = jail
+                  }
+                }
+              }
+
               // Delete-containing commands are authorized by askDelete alone —
               // the delete UI shows the full command (including any external
               // paths it touches), so a separate bash/external_directory
@@ -954,6 +1130,7 @@ export const BashTool = Tool.define(
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
                   description: params.description,
+                  jail: repoShellJail,
                 },
                 ctx,
               )
