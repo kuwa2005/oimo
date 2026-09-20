@@ -2,12 +2,14 @@ import type { Hooks, PluginInput } from "@mimo-ai/plugin"
 import { Log } from "../util"
 import { Installation } from "../installation"
 import { InstallationVersion } from "../installation/version"
+import { zenCompatVersion } from "../session/provider-headers"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 
 const log = Log.create({ service: "plugin.codex" })
+const CODEX_USER_AGENT = `opencode/${zenCompatVersion(InstallationVersion)}`
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -545,7 +547,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "User-Agent": `opencode/${InstallationVersion}`,
+                "User-Agent": CODEX_USER_AGENT,
               },
               body: JSON.stringify({ client_id: CLIENT_ID }),
             })
@@ -569,7 +571,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
-                      "User-Agent": `opencode/${InstallationVersion}`,
+                      "User-Agent": CODEX_USER_AGENT,
                     },
                     body: JSON.stringify({
                       device_auth_id: deviceData.device_auth_id,
@@ -629,7 +631,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     "chat.headers": async (input, output) => {
       if (input.model.providerID !== "openai") return
       output.headers.originator = "opencode"
-      output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
+      output.headers["User-Agent"] = `${CODEX_USER_AGENT} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
     },
     "chat.params": async (input, output) => {

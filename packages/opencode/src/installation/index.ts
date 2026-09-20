@@ -217,9 +217,14 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
         if (detectedMethod === "curl") {
           // Resolve the latest version from GitHub, matching the source the
           // install script downloads from. Override the repo via GH_REPO.
+          // Follow redirects (-L) and use url_effective: renamed repos
+          // (e.g. OpenMimoCode → oimo) insert an intermediate 301 whose
+          // Location ends in /latest, which %{redirect_url} alone would misparse.
           const url = `https://github.com/${RELEASE_REPO}/releases/latest`
-          const redirect = (yield* text(["curl", "-fsSI", "-o", "/dev/null", "-w", "%{redirect_url}", url])).trim()
-          const version = redirect.split("/").pop()?.replace(/^v/, "") ?? ""
+          const final = (
+            yield* text(["curl", "-fsSIL", "-o", "/dev/null", "-w", "%{url_effective}", url])
+          ).trim()
+          const version = final.split("/").pop()?.replace(/^v/, "") ?? ""
           if (/^\d+\.\d+\.\d+/.test(version)) return version
           return yield* Effect.die(new Error(`failed to resolve latest version from ${url}`))
         }

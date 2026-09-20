@@ -1,13 +1,29 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import {
   OIMO_USER_AGENT,
+  ZEN_COMPAT_VERSION,
   ZEN_USER_AGENT,
   oimoUserAgent,
   providerRequestHeaders,
+  zenCompatVersion,
   zenUserAgent,
 } from "../../src/session/provider-headers"
 
 const ORIGINAL_CLIENT = process.env.MIMOCODE_CLIENT
+
+describe("zenCompatVersion", () => {
+  test("raises fork / local versions to the Console free-tier floor", () => {
+    expect(zenCompatVersion("0.3.0")).toBe(ZEN_COMPAT_VERSION)
+    expect(zenCompatVersion("local")).toBe(ZEN_COMPAT_VERSION)
+    expect(zenCompatVersion("1.17.99")).toBe(ZEN_COMPAT_VERSION)
+  })
+
+  test("keeps versions already at or above the floor", () => {
+    expect(zenCompatVersion(ZEN_COMPAT_VERSION)).toBe(ZEN_COMPAT_VERSION)
+    expect(zenCompatVersion("1.18.19")).toBe("1.18.19")
+    expect(zenCompatVersion("2.0.0")).toBe("2.0.0")
+  })
+})
 
 describe("providerRequestHeaders", () => {
   afterEach(() => {
@@ -27,13 +43,14 @@ describe("providerRequestHeaders", () => {
 
     expect(headers["User-Agent"]).toBe(zenUserAgent())
     expect(headers["User-Agent"]).toBe(ZEN_USER_AGENT)
+    expect(headers["User-Agent"]).toBe(`opencode/${ZEN_COMPAT_VERSION}`)
     expect(headers["User-Agent"].startsWith("opencode/")).toBe(true)
     expect(headers["x-opencode-client"]).toBe("cli")
     expect(headers["x-opencode-session"]).toBe("ses_abc")
     expect(headers["x-opencode-request"]).toBe("msg_123")
     expect(headers["x-opencode-project"]).toBe("prj_xyz")
     expect(headers["x-session-affinity"]).toBeUndefined()
-    expect(headers["x-parent-session-id"]).toBeUndefined()
+    expect(headers["x-parent-session-id"]).toBe("ses_parent")
   })
 
   test("Zen: x-opencode-client follows MIMOCODE_CLIENT (default cli)", () => {
@@ -71,13 +88,15 @@ describe("providerRequestHeaders", () => {
     const headers = providerRequestHeaders({
       providerID: "opencode",
       sessionID: "ses_1",
+      parentSessionID: "ses_parent",
       extra: { "User-Agent": "oimo/spoof", "x-custom": "keep" },
     })
     expect(headers["User-Agent"]).toBe(ZEN_USER_AGENT)
     expect(headers["x-custom"]).toBe("keep")
+    expect(headers["x-parent-session-id"]).toBe("ses_parent")
   })
 
-  test("non-Zen: oimo UA + session affinity only", () => {
+  test("non-Zen: oimo UA + session affinity; extra/plugin can override UA", () => {
     const headers = providerRequestHeaders({
       providerID: "anthropic",
       sessionID: "ses_abc",
@@ -90,10 +109,25 @@ describe("providerRequestHeaders", () => {
     expect(headers["User-Agent"]).toBe(OIMO_USER_AGENT)
     expect(headers["User-Agent"].startsWith("oimo/")).toBe(true)
     expect(headers["x-session-affinity"]).toBe("ses_abc")
+    expect(headers["X-Session-Id"]).toBe("ses_abc")
     expect(headers["x-parent-session-id"]).toBe("ses_parent")
     expect(headers["Authorization"]).toBe("Bearer x")
     expect(headers["x-opencode-client"]).toBeUndefined()
     expect(headers["x-opencode-session"]).toBeUndefined()
+  })
+
+  test("non-Zen: Codex-style plugin User-Agent wins (upstream merge order)", () => {
+    const headers = providerRequestHeaders({
+      providerID: "openai",
+      sessionID: "ses_1",
+      extra: {
+        originator: "opencode",
+        "User-Agent": "opencode/1.18.19 (linux 6.1; x64)",
+      },
+    })
+    expect(headers["User-Agent"]).toBe("opencode/1.18.19 (linux 6.1; x64)")
+    expect(headers.originator).toBe("opencode")
+    expect(headers["x-session-affinity"]).toBe("ses_1")
   })
 
   test("omits empty optional fields", () => {

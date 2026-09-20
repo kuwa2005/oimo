@@ -80,6 +80,22 @@ describe("installation", () => {
       expect(result).toBe("0.1.1")
     })
 
+    test("follows rename redirects to the final tag URL", async () => {
+      const layer = testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          if (cmd === "curl" && args.includes("-fsSIL") && args.includes("%{url_effective}"))
+            return "https://github.com/kuwa2005/oimo/releases/tag/v0.3.0\n"
+          return ""
+        },
+      )
+
+      const result = await Effect.runPromise(
+        Installation.Service.use((svc) => svc.latest("curl")).pipe(Effect.provide(layer)),
+      )
+      expect(result).toBe("0.3.0")
+    })
+
     test("dies for unsupported channels (npm/pnpm/bun/brew/choco/scoop/unknown)", async () => {
       const layer = testLayer(() => jsonResponse({}))
       const unsupported: Installation.Method[] = ["npm", "pnpm", "bun", "brew", "choco", "scoop", "unknown"]
