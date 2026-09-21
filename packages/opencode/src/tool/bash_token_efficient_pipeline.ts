@@ -39,6 +39,8 @@ const ANSI_DCS = /\x1b[PX^_][\s\S]*?\x1b\\/g
 const BACKSPACE = /[^\n]\x08/g
 const CTRL_BYTES = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g
 
+// Keep in sync with packages/opencode/src/security/secret-redact.ts (high-confidence shapes).
+// Bash cleanse keeps its own shorter markers for token-efficiency; chat compliance uses [REDACTED:kind].
 const REDACT_PATTERNS: Array<[RegExp, string]> = [
   // Bearer / Token <opaque>
   [/\b(Bearer|Token)\s+[A-Za-z0-9._\-+/=]{16,}/gi, "$1 <redacted>"],

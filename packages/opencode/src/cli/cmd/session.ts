@@ -122,6 +122,12 @@ export const SessionListCommand = cmd({
         requiresArg: false,
         describe: CHARACTER_CLI_HELP,
       })
+      .option("compliance", {
+        type: "boolean",
+        describe:
+          "選択したセッションを入力コンプライアンス付きで起動する (チャットの高確度シークレットをマスク・既定オフ)",
+        default: false,
+      })
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
@@ -183,6 +189,7 @@ export function launchFlags(args: {
   autonomy?: boolean
   fde?: boolean
   spauto?: boolean
+  compliance?: boolean
   character?: string | boolean
 }): string[] {
   const flags: string[] = []
@@ -190,6 +197,7 @@ export function launchFlags(args: {
   if (args.autonomy) flags.push("--se")
   if (args.fde) flags.push("--fde")
   if (args.spauto) flags.push("--spauto")
+  if (args.compliance) flags.push("--compliance")
   const character = characterLaunchFlag(args.character)
   if (character) flags.push(character)
   return flags

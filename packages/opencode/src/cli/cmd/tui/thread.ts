@@ -294,6 +294,10 @@ export const TuiThreadCommand = cmd({
         process.env.MIMOCODE_SPAUTO = "1"
       }
 
+      if (args.compliance) {
+        process.env.MIMOCODE_COMPLIANCE = "1"
+      }
+
       const env = sanitizedProcessEnv({
         [MIMOCODE_PROCESS_ROLE]: "worker",
         [MIMOCODE_RUN_ID]: ensureRunID(),

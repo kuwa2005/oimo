@@ -301,8 +301,15 @@ export const RunCommand = cmd({
         hidden: true,
         default: false,
       })
+      .option("compliance", {
+        type: "boolean",
+        describe:
+          "入力コンプライアンス: チャットに貼られた高確度シークレットを保存・送信前にマスクする (既定オフ)",
+        default: false,
+      })
   },
   handler: async (args) => {
+    if (args.compliance) process.env.MIMOCODE_COMPLIANCE = "1"
     const auto = args.auto || args["dangerously-skip-permissions"]
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))

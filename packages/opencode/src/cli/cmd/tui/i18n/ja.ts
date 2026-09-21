@@ -446,6 +446,7 @@ export const dict = {
   "tui.dialog.export.hint.confirm_action": "確認",
   "tui.dialog.export.hint.options_action": "オプション",
   "tui.toast.copied_to_clipboard": "クリップボードにコピーしました",
+  "tui.toast.compliance.redacted": "入力内のシークレットらしき値を {{count}} 件マスクしました（compliance）",
   "tui.toast.try_best.paused_other": "Try-best ループを検出したため、セッション {{session}} を一時停止しました。",
   "tui.toast.try_best.auto_continue": "同じ操作が続いたため一時停止し、別方針で自動続行します。",
   "tui.toast.try_best.handoff_failed": "選択したハーネスへの引き継ぎを開始できませんでした。",

@@ -98,4 +98,10 @@ export function withTuiLaunchOptions<T>(yargs: Argv<T>) {
         "明示的に拒否されていないパーミッションを自動承認する (危険!)。ワークスペース信頼プロンプトもスキップする",
       default: false,
     })
+    .option("compliance", {
+      type: "boolean",
+      describe:
+        "入力コンプライアンス: チャットに貼られた高確度シークレットを保存・送信前にマスクする (既定オフ。企業向け)",
+      default: false,
+    })
 }

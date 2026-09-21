@@ -44,6 +44,7 @@ Notable TUI flags:
 | `--character` | 愚痴モード (Friction フィードバック表示)。未指定=OFF、`--character`=ON、`--character=off` で明示 OFF。学習・推論は変わらない |
 | `--spauto` / `--autosp` | Super Auto (self-hearing, never-ask from launch; risk gate every time) |
 | `--auto` / `--yolo` | Auto-approve permissions not explicitly denied; skip workspace trust; also auto-approves deletes |
+| `--compliance` | Mask high-confidence secrets in chat input before save/LLM (enterprise; default off). See @config.md (Compliance) |
 | `--never-ask` | Start with never-ask on |
 | `--trust` | Skip workspace trust prompt |
 | `--dangerously-skip-permissions` | Same permission auto-approve as `--auto` (without the yolo alias) |

@@ -607,6 +607,16 @@ export type EventSessionTryBestDetected = {
   }
 }
 
+export type EventSessionComplianceRedacted = {
+  type: "session.compliance.redacted"
+  properties: {
+    sessionID: string
+    messageID: string
+    count: number
+    kinds: Array<string>
+  }
+}
+
 export type EventHookExecuted = {
   type: "hook.executed"
   properties: {
@@ -1618,6 +1628,7 @@ export type GlobalEvent = {
     | EventSessionError
     | EventSessionRetryAttempt
     | EventSessionTryBestDetected
+    | EventSessionComplianceRedacted
     | EventHookExecuted
     | EventHookReactReentered
     | EventHookReactMaxReached
@@ -2088,6 +2099,15 @@ export type Config = {
      * Judge evaluation retries before stopping with judge_failed (default 2).
      */
     judge_max_retries?: number
+  }
+  /**
+   * Enterprise input compliance: redact high-confidence secrets from user chat before persist/LLM. Opt-in via compliance.redact_input, --compliance, or MIMOCODE_COMPLIANCE=1.
+   */
+  compliance?: {
+    /**
+     * When true, redact high-confidence secrets from user chat input before persist and LLM send. Default false (opt-in). Also enabled by --compliance / MIMOCODE_COMPLIANCE=1.
+     */
+    redact_input?: boolean
   }
   /**
    * Reliability harness: evidence freshness before goal stop, existence/claim checks on bash, loop convergence, and edit-scope boundaries. On by default; set enabled:false or MIMOCODE_DISABLE_RELIABILITY=1 to opt out.
@@ -3066,6 +3086,7 @@ export type Event =
   | EventSessionError
   | EventSessionRetryAttempt
   | EventSessionTryBestDetected
+  | EventSessionComplianceRedacted
   | EventHookExecuted
   | EventHookReactReentered
   | EventHookReactMaxReached

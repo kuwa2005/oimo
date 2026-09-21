@@ -293,6 +293,17 @@ export const Event = {
       }),
     }),
   ),
+  ComplianceRedacted: BusEvent.define(
+    "session.compliance.redacted",
+    z.object({
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
+      /** Number of secret pattern hits (kinds may repeat). Never includes values. */
+      count: z.number().int().positive(),
+      /** Distinct pattern kind names only (e.g. aws_key). */
+      kinds: z.array(z.string()),
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }) {

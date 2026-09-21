@@ -1621,6 +1621,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     showTryBest(evt.properties)
   })
 
+  event.on("session.compliance.redacted", (evt) => {
+    const count = evt.properties.count
+    toast.show({
+      variant: "warning",
+      message: t("tui.toast.compliance.redacted", { count: String(count) }),
+      duration: 4000,
+    })
+  })
+
   event.on("message.part.updated", (evt) => {
     const detection = detectionFromPart(evt.properties.part)
     if (detection) showTryBest(detection)

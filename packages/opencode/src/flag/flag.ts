@@ -449,4 +449,10 @@ export const Flag = {
   get MIMOCODE_CLIENT() {
     return process.env["MIMOCODE_CLIENT"] ?? "cli"
   },
+
+  // Defaults to false. Set MIMOCODE_COMPLIANCE=true (or 1), or pass --compliance,
+  // to redact high-confidence secrets from user chat input before persist/LLM.
+  get MIMOCODE_COMPLIANCE() {
+    return truthy("MIMOCODE_COMPLIANCE")
+  },
 }

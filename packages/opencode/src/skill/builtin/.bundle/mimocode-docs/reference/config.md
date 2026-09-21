@@ -38,6 +38,7 @@ Memory files live under `~/.local/share/oimo/memory/`:
 - `MIMOCODE_EXPERIMENTAL_CRON` — scheduled prompts (cron/loop); **on by default**. `MIMOCODE_DISABLE_CRON` kills it at runtime. Tune loop keepalive with `MIMOCODE_LOOP_KEEPALIVE_BUDGET` (default 1) and `MIMOCODE_LOOP_KEEPALIVE_DELAY_S` (default 1200).
 - `MIMOCODE_EXPERIMENTAL_TOKEN_EFFICIENCY_HEURISTIC` — shape-based compaction of bash output to save tokens; off by default.
 - `MIMOCODE_DISABLE_BUILTIN_SKILLS`, `_COMPOSE_SKILLS`, `_EXTERNAL_SKILLS`, `_CLAUDE_CODE_SKILLS`, `_CODEX_SKILLS`, `_OPENCODE_SKILLS`, `_PROJECT_CONFIG`, `_CLAUDE_IMPORT` — feature toggles.
+- `MIMOCODE_COMPLIANCE` — when `1`/`true`, redact high-confidence secrets from **user chat input** before persist and LLM send (same as `--compliance`). Default off.
 
 ## Top-level config keys
 
@@ -192,6 +193,23 @@ The trigger is the model's prompt capacity (`limit.input` when the provider publ
 **Soft continue (`--warm`):** Starts a **new** session instead of resuming history. Injects a one-turn brief (title, open todos, last assistant snippet, `.oimo/oimo-session-*.md` result tail). Scoped to the **current directory** (unlike `-c`). Use `--warm=deep` to also set `contextFrom` / `contextWatermark` at the last compaction boundary. Mutually exclusive with `-c`.
 
 **`-c` alone does not re-apply CLI flags.** `--se` / `--fde` / `--character` / `--auto` are process env for that launch only (not stored on the session). To keep the persona, pass the flag again or switch with `/auto` (persists mode to global config).
+
+### Compliance (enterprise input redaction)
+
+Opt-in. Default **off** — personal “paste a key so the agent can configure it” workflows stay possible unless you enable this.
+
+| Key / flag | Purpose |
+|------------|---------|
+| `compliance.redact_input` | When `true`, mask high-confidence secrets in user chat text before DB persist and LLM send |
+| `--compliance` / `MIMOCODE_COMPLIANCE=1` | Same as `redact_input: true` for that process (overrides config) |
+
+**What is masked:** AWS access keys (`AKIA`/`ASIA`), PEM private keys, JWTs, Bearer/Token opaques, GitHub/OpenAI/Anthropic/Slack token shapes, DB connection URLs, and `password=` / `api_key=` assignments with long non-placeholder values.
+
+**What is not:** PII, tool-read `.env` contents, synthetic/internal text, short dummies, placeholders (`***`, `changeme`, `$PASSWORD`), or ordinary code (`password?: string`, `getPassword()`).
+
+On mask, the TUI shows a short toast with **count only** (no secret values). Sending is never blocked — placeholders like `[REDACTED:aws_key]` remain in context.
+
+If you are writing docs that intentionally include real-shaped example keys, leave compliance off for that session.
 
 ### Multi-repository workspace files
 

@@ -63,6 +63,7 @@ export async function runMetaCli(argv = hideBin(process.argv)) {
     .example("oimo -c --auto --se", "最後のセッションを自動許可 + SE 自律モードで続行する")
     .example("oimo --se --character", "SE 自律 + 愚痴モード (Friction フィードバック表示) で起動する")
     .example("oimo --spauto", "Super Auto で起動する (ヒアリングなし・完全ノンストップ)")
+    .example("oimo --compliance", "入力シークレットをマスクして起動する (企業向け・既定オフ)")
     .example('oimo run "バグを修正して"', "ヘッドレスで 1 回のプロンプトを実行する")
     .example("oimo session list", "セッションの一覧を表示する")
     .completion("completion", "シェルの補完スクリプトを生成する")

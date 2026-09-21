@@ -2590,3 +2590,97 @@ it.live(
     ),
   30_000,
 )
+
+it.live("compliance redact_input masks secrets before persist (config)", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* () {
+      const prev = process.env.MIMOCODE_COMPLIANCE
+      process.env.MIMOCODE_COMPLIANCE = "1"
+      try {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Compliance on" })
+        const secret = "AKIAIOSFODNN7EXAMPLE"
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          noReply: true,
+          parts: [{ type: "text", text: `please use ${secret} for S3` }],
+        })
+        const msgs = yield* sessions.messages({ sessionID: chat.id })
+        const user = msgs.find((m) => m.info.role === "user")
+        const text = user?.parts.find((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+        expect(text?.text.includes(secret)).toBe(false)
+        expect(text?.text.includes("[REDACTED:aws_key]")).toBe(true)
+        expect(text?.text.includes("please use")).toBe(true)
+      } finally {
+        if (prev !== undefined) process.env.MIMOCODE_COMPLIANCE = prev
+        else delete process.env.MIMOCODE_COMPLIANCE
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("compliance via config.redact_input masks without env", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* () {
+      const prev = process.env.MIMOCODE_COMPLIANCE
+      delete process.env.MIMOCODE_COMPLIANCE
+      try {
+        const cfg = yield* Config.Service
+        const info = yield* cfg.get()
+        expect(info.compliance?.redact_input).toBe(true)
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Compliance config" })
+        const secret = "AKIAIOSFODNN7EXAMPLE"
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          noReply: true,
+          parts: [{ type: "text", text: `please use ${secret} for S3` }],
+        })
+        const msgs = yield* sessions.messages({ sessionID: chat.id })
+        const user = msgs.find((m) => m.info.role === "user")
+        const text = user?.parts.find((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+        expect(text?.text.includes(secret)).toBe(false)
+        expect(text?.text.includes("[REDACTED:aws_key]")).toBe(true)
+      } finally {
+        if (prev !== undefined) process.env.MIMOCODE_COMPLIANCE = prev
+      }
+    }),
+    {
+      git: true,
+      config: (url: string) => ({ ...providerCfg(url), compliance: { redact_input: true } }),
+    },
+  ),
+)
+
+it.live("compliance off leaves secrets unchanged", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* () {
+      const prev = process.env.MIMOCODE_COMPLIANCE
+      delete process.env.MIMOCODE_COMPLIANCE
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Compliance off" })
+      const secret = "AKIAIOSFODNN7EXAMPLE"
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: `please use ${secret} for S3` }],
+      })
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const user = msgs.find((m) => m.info.role === "user")
+      const text = user?.parts.find((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+      expect(text?.text).toContain(secret)
+      if (prev !== undefined) process.env.MIMOCODE_COMPLIANCE = prev
+    }),
+    { git: true, config: providerCfg },
+  ),
+)

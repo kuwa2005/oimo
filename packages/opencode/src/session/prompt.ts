@@ -33,6 +33,8 @@ import { computeLastMessageInfo } from "./last-message-info"
 import { contextPressureLevel, usable, isOverflow as overflowCheck } from "./overflow"
 import { Config } from "@/config"
 import * as ConfigAutonomy from "@/config/autonomy"
+import * as ConfigCompliance from "@/config/compliance"
+import { redactUserParts } from "@/security/secret-redact"
 import * as ConfigReliability from "@/config/reliability"
 import * as Evidence from "@/reliability/evidence"
 import { isMemoryWriteEnabled } from "@/memory/write-gate"
@@ -2661,9 +2663,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
-      const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+      const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
       )
+      let parts = resolvedParts
 
       // Guard: reject the message if no resolved part carries substantive content.
       // A message with only empty/ignored text or only droppable file types
@@ -2691,6 +2694,29 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         { message: info, parts },
       )
+
+      // Enterprise compliance: mask high-confidence secrets before persist/LLM.
+      // Opt-in via --compliance / MIMOCODE_COMPLIANCE / compliance.redact_input.
+      // Synthetic parts (file reads, agent hints) are left untouched.
+      if (ConfigCompliance.redactInput(yield* config.get())) {
+        const masked = redactUserParts(parts)
+        if (masked.redacted) {
+          parts = masked.parts
+          const kinds = [...new Set(masked.hits)]
+          yield* bus.publish(Session.Event.ComplianceRedacted, {
+            sessionID: input.sessionID,
+            messageID: info.id,
+            count: masked.hits.length,
+            kinds,
+          })
+          log.info("compliance redacted user input", {
+            sessionID: input.sessionID,
+            messageID: info.id,
+            count: masked.hits.length,
+            kinds,
+          })
+        }
+      }
 
       const parsed = MessageV2.Info.safeParse(info)
       if (!parsed.success) {

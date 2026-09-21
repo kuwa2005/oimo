@@ -4,6 +4,7 @@
  * Does not give LLMs raw DB access — callers get redacted, scoped Evidence.
  */
 import { createHash, randomBytes } from "crypto"
+import { redactSecrets } from "../security/secret-redact"
 
 export type EvidenceKind =
   | "message"
@@ -35,27 +36,7 @@ export type EvidenceRecord = {
   redacted: boolean
 }
 
-const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
-  { name: "aws_key", re: /\bAKIA[0-9A-Z]{16}\b/g },
-  { name: "bearer", re: /\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi },
-  { name: "jwt", re: /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g },
-  { name: "private_key", re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g },
-  { name: "generic_token", re: /\b(?:api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*['"]?[^\s'"]{8,}/gi },
-  { name: "connection_string", re: /\b(?:postgres|mysql|mongodb|redis):\/\/[^\s]+/gi },
-]
-
-export function redactSecrets(text: string): { text: string; redacted: boolean; hits: string[] } {
-  let out = text
-  const hits: string[] = []
-  for (const p of SECRET_PATTERNS) {
-    if (p.re.test(out)) {
-      hits.push(p.name)
-      out = out.replace(p.re, `[REDACTED:${p.name}]`)
-    }
-    p.re.lastIndex = 0
-  }
-  return { text: out, redacted: hits.length > 0, hits }
-}
+export { redactSecrets }
 
 export function evidenceFingerprint(input: {
   projectID: string

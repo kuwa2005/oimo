@@ -30,6 +30,7 @@ import { ConfigCommand } from "./command"
 import { ConfigCompose } from "./compose"
 import * as ConfigAutonomy from "./autonomy"
 import { permissionConfigForPreset } from "../autonomy/safe-auto"
+import * as ConfigCompliance from "./compliance"
 import * as ConfigReliability from "./reliability"
 import { ConfigFormatter } from "./formatter"
 import { MIMOCODE_GITIGNORE_ENTRIES } from "./gitignore"
@@ -119,6 +120,10 @@ const InfoSchema = Schema.Struct({
   autonomy: Schema.optional(ConfigAutonomy.Info).annotate({
     description:
       "AI-driven autonomous execution: auto-resolve decisions, auto-approve safe permissions, and continue until task completion or budget limits.",
+  }),
+  compliance: Schema.optional(ConfigCompliance.Info).annotate({
+    description:
+      "Enterprise input compliance: redact high-confidence secrets from user chat before persist/LLM. Opt-in via compliance.redact_input, --compliance, or MIMOCODE_COMPLIANCE=1.",
   }),
   reliability: Schema.optional(ConfigReliability.Info).annotate({
     description:
@@ -1138,6 +1143,10 @@ export const layer = Layer.effect(
                   : "safe_auto"
             result.permission = mergeDeep(permissionConfigForPreset(preset), result.permission ?? {})
           }
+        }
+
+        if (Flag.MIMOCODE_COMPLIANCE) {
+          result.compliance = { ...result.compliance, redact_input: true }
         }
 
         if (Flag.MIMOCODE_PERMISSION) {

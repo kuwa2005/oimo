@@ -12,6 +12,20 @@ How-to for the features users most often ask about. For config keys see @config.
 
 For a custom base URL, API key, or OpenAI-/Anthropic-compatible model, read @providers.md before editing config; it covers protocol selection, adapter names, provider reuse, secret handling, and local verification.
 
+## Enterprise input compliance (`--compliance`)
+
+Opt-in. When enabled, oimo masks high-confidence secrets in **user chat input** before they are saved or sent to the model. Default is **off**.
+
+```bash
+oimo --compliance
+# or
+MIMOCODE_COMPLIANCE=1 oimo
+# or in oimo.jsonc:
+# "compliance": { "redact_input": true }
+```
+
+A short TUI toast reports how many values were masked (never the values themselves). Sending is never blocked. Details and exclusions: @config.md (Compliance). This is independent of evolve Evidence `privacy.redact_secrets`.
+
 ## TUI rendering, lag & remote use
 
 **macOS default terminal** — Open Mimo Code does not support the built-in Terminal.app. For misaligned output, flicker, or other rendering problems, use the VS Code integrated terminal or install iTerm2:

@@ -472,6 +472,7 @@ export const dict: Record<string, string> = {
   "tui.dialog.export.hint.confirm_action": "to confirm",
   "tui.dialog.export.hint.options_action": "for options",
   "tui.toast.copied_to_clipboard": "Copied to clipboard",
+  "tui.toast.compliance.redacted": "Masked {{count}} secret-like value(s) in your input (compliance)",
   "tui.toast.try_best.paused_other": "Try-best loop detected; session {{session}} was paused.",
   "tui.toast.try_best.auto_continue": "Same action stalled — pausing and continuing with a different approach.",
   "tui.toast.try_best.handoff_failed": "Failed to start the selected harness handoff.",
