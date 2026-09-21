@@ -66,12 +66,15 @@ export function skillSearchReminderForSession(input: {
   agent: { name: string; mode: "subagent" | "primary" | "all" }
   model: { id: string; name?: string; family?: string; api: { id: string } }
   messages: ReminderMessage[]
+  /** Same-session actor id (`general-8`, …). Only the interactive main actor gets this reminder. */
+  agentID?: string
 }) {
   if (
     !Flag.MIMOCODE_ENABLE_SKILL_SEARCH_REMINDER ||
     input.session.parentID ||
     input.agent.mode === "subagent" ||
     input.agent.name === "compose" ||
+    (input.agentID != null && input.agentID !== "main") ||
     isSkillSearchDisabled(input.model)
   )
     return

@@ -101,6 +101,15 @@ describe("skillSearchReminder", () => {
           messages,
         }),
       ).toBeUndefined()
+      expect(
+        skillSearchReminderForSession({
+          session: {},
+          agent: { name: "general", mode: "primary" },
+          model,
+          messages,
+          agentID: "general-8",
+        }),
+      ).toBeUndefined()
     } finally {
       Flag.MIMOCODE_ENABLE_SKILL_SEARCH_REMINDER = enabled
     }

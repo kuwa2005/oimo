@@ -951,6 +951,7 @@ export const layer = Layer.effect(
       agent: Agent.Info
       model: Provider.Model
       session: Session.Info
+      agentID?: string
     }) {
       const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
       if (!userMessage) return input.messages
@@ -1007,6 +1008,7 @@ export const layer = Layer.effect(
 
       // Search reminders apply only to eligible direct user sessions and models.
       // They advise the primary agent when to search; the model still decides whether to call.
+      // Same-session actors (agentID !== "main") must not receive main-session triggers (EVB-20260905).
       const reminder = skillSearchReminderForSession(input)
       if (reminder) {
         const part = yield* sessions.updatePart({
@@ -1308,7 +1310,14 @@ Keep planning proportional to task complexity: for simple combinations, two or t
 
       const plan = Session.plan(input.session)
       const exists = yield* fsys.existsSafe(plan)
-      if (!exists) yield* fsys.ensureDir(path.dirname(plan)).pipe(Effect.catch(Effect.die))
+      // Non-fatal: an unwritable plan dir (e.g. legacy worktree "/") must not abort spawn (EVB-20260905).
+      if (!exists) {
+        yield* fsys.ensureDir(path.dirname(plan)).pipe(
+          Effect.catch((err) =>
+            elog.warn("plan dir ensure skipped", { plan, err: String(err) }).pipe(Effect.as(undefined)),
+          ),
+        )
+      }
       const part = yield* sessions.updatePart({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
@@ -4181,7 +4190,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
-          msgs = yield* insertReminders({ messages: msgs, agent, model, session })
+          msgs = yield* insertReminders({ messages: msgs, agent, model, session, agentID: resolvedAgentID })
 
           const msg: MessageV2.Assistant = {
             id: MessageID.ascending(),

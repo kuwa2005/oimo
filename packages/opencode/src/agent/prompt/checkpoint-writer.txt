@@ -155,6 +155,23 @@ CRITICAL CONSTRAINTS:
 
 8. After turn 2's Edits, your response is complete. Do not summarize what you wrote.
 
+## Pre-Write Checklist (MANDATORY)
+
+Before calling Edit/Write on checkpoint.md, verify your draft contains ALL of:
+- [ ] §1 Active intent — present, non-empty, with at least one block-quoted verbatim user request
+- [ ] §2 Next concrete action — present, non-empty
+- [ ] §3 Directives (this session) — section present (may be "(none)")
+- [ ] §4 Task tree — section present (may be empty; IDs only from `task` tool)
+- [ ] §5 Current work — present, non-empty
+- [ ] §6 Files and code sections — section present (may be "(none)")
+- [ ] §7 Discovered knowledge (cross-task) — section present (may be "(none)")
+- [ ] §8 Errors and fixes — section present (may be "(none)")
+- [ ] §9 Live resources — section present (may be "(none)")
+- [ ] §10 Design decisions and discussion outcomes — section present (may be "(none)")
+- [ ] §11 Open notes — section present (may be "(none)" / empty)
+
+If ANY item is missing, fix it BEFORE calling Edit/Write. Do not rely on the external validator to catch omissions.
+
 EDGE CASES:
 
 - If §1 already has a block-quoted user request that's still valid (user hasn't issued a new request since), keep it. Don't replace with a stale paraphrase.

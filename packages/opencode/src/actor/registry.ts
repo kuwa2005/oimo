@@ -1,5 +1,5 @@
 import { Effect, Layer, Context, Schedule } from "effect"
-import { Database, inArray, eq, and, lte, sql } from "@/storage"
+import { Database, inArray, eq, and, lte, ne, sql } from "@/storage"
 import { Bus } from "@/bus"
 import type { SessionID, MessageID } from "@/session/schema"
 import { ActorRegistryTable } from "./actor.sql"
@@ -368,20 +368,42 @@ export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
     const renderForAgent = Effect.fn("ActorRegistry.renderForAgent")(function* (sessionID: SessionID) {
       const actors = yield* listBySession(sessionID)
       const active = actors.filter((actor) => actor.background && (actor.status === "pending" || actor.status === "running"))
-      if (active.length === 0) return ""
+      const orphans = actors.filter(
+        (actor) =>
+          actor.status === "idle" &&
+          actor.lastOutcome === "failure" &&
+          actor.lastError?.includes("orphaned: process restarted"),
+      )
+      if (active.length === 0 && orphans.length === 0) return ""
 
       const lines: string[] = []
-      lines.push("## Active Actors")
-      lines.push("")
-      lines.push(`You have ${active.length} background actor(s) registered. Interact via the \`actor\` tool.`)
-      lines.push("")
-      const now = Date.now()
-      for (const actor of active) {
-        const idleMs = now - actor.lastTurnTime
-        const idle = idleMs < 60_000 ? `${Math.floor(idleMs / 1000)}s` : `${Math.floor(idleMs / 60_000)}m`
-        lines.push(`- actor_id: ${actor.actorID} (${actor.status}, last activity ${idle} ago)`)
-        lines.push(`  description: ${actor.description}`)
-        lines.push(`  agent: ${actor.agent}`)
+      if (orphans.length > 0) {
+        lines.push("## Orphaned Actors (previous process restarted)")
+        lines.push("")
+        lines.push(
+          `${orphans.length} subagent(s) were orphaned by a host restart. Re-dispatch if their work was not committed.`,
+        )
+        lines.push("")
+        for (const actor of orphans) {
+          lines.push(`- actor_id: ${actor.actorID} (orphaned, turns=${actor.turnCount})`)
+          lines.push(`  description: ${actor.description}`)
+          lines.push(`  agent: ${actor.agent}`)
+        }
+        lines.push("")
+      }
+      if (active.length > 0) {
+        lines.push("## Active Actors")
+        lines.push("")
+        lines.push(`You have ${active.length} background actor(s) registered. Interact via the \`actor\` tool.`)
+        lines.push("")
+        const now = Date.now()
+        for (const actor of active) {
+          const idleMs = now - actor.lastTurnTime
+          const idle = idleMs < 60_000 ? `${Math.floor(idleMs / 1000)}s` : `${Math.floor(idleMs / 60_000)}m`
+          lines.push(`- actor_id: ${actor.actorID} (${actor.status}, last activity ${idle} ago)`)
+          lines.push(`  description: ${actor.description}`)
+          lines.push(`  agent: ${actor.agent}`)
+        }
       }
       return lines.join("\n")
     })
@@ -455,23 +477,53 @@ export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
     // --- Orphan Recovery ---
     // On init, mark pending/running actors from a PREVIOUS process as idle
     // with failure outcome. Actors from this very instance (same instanceID)
-    // are still alive and must NOT be touched.
-    yield* Effect.sync(() =>
-      Database.use((db) => {
-        const now = Date.now()
-        db.run(sql`
-          UPDATE actor_registry
-          SET status = 'idle',
-              last_outcome = 'failure',
-              last_error = 'orphaned: process restarted',
-              time_updated = ${now},
-              time_completed = ${now}
-          WHERE status IN ('pending', 'running')
-            AND instance_id != ${instanceID}
-        `)
-      }),
+    // are still alive and must NOT be touched. Publish ActorStatusChanged so
+    // waiters / TUI / resume paths see the failure instead of an ambiguous idle
+    // (EVB-20260907).
+    const orphaned = yield* Effect.sync(() =>
+      Database.use((db) =>
+        db
+          .select()
+          .from(ActorRegistryTable)
+          .where(
+            and(
+              inArray(ActorRegistryTable.status, ["pending", "running"]),
+              ne(ActorRegistryTable.instance_id, instanceID),
+            ),
+          )
+          .all(),
+      ),
     )
-    log.info("orphan recovery complete", { instanceID })
+    if (orphaned.length > 0) {
+      const now = Date.now()
+      yield* Effect.sync(() =>
+        Database.use((db) => {
+          db.run(sql`
+            UPDATE actor_registry
+            SET status = 'idle',
+                last_outcome = 'failure',
+                last_error = 'orphaned: process restarted',
+                time_updated = ${now},
+                time_completed = ${now}
+            WHERE status IN ('pending', 'running')
+              AND instance_id != ${instanceID}
+          `)
+        }),
+      )
+      for (const row of orphaned) {
+        const entry = fromRow(row)
+        yield* bus.publish(Events.ActorStatusChanged, {
+          sessionID: entry.sessionID,
+          actorID: entry.actorID,
+          status: "idle",
+          lastOutcome: "failure",
+          turnCount: entry.turnCount,
+          lastTurnTime: entry.lastTurnTime,
+          error: "orphaned: process restarted",
+        })
+      }
+    }
+    log.info("orphan recovery complete", { instanceID, orphaned: orphaned.length })
 
     // --- Stuck Detection ---
     const scanStuck = Effect.gen(function* () {

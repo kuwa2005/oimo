@@ -63,25 +63,27 @@ function ensureGlobal() {
 describe("migrateFromGlobal", () => {
   test("migrates global sessions on first project creation", () =>
     withTmpdirOutsideGit(async () => {
-      // 1. Start in a non-git directory — fromDirectory yields the "global" project ID.
+      // 1. Non-git dirs get a path-scoped project id (not the shared `global` row).
       await using tmp = await tmpdir()
       const { project: pre } = await run((svc) => svc.fromDirectory(tmp.path))
-      expect(pre.id).toBe(ProjectID.global)
+      expect(pre.id).not.toBe(ProjectID.global)
 
-      // 2. Seed a session under "global" with matching directory
+      // 2. Seed a legacy session still under "global" with matching directory
+      ensureGlobal()
       const id = uid()
       seed({ id, dir: tmp.path, project: ProjectID.global })
 
-      // 3. Initialise git so the project gets a real (UUID) ID
+      // 3. Initialise git — path-scoped id is carried into .git/oimo-project-id
       await $`git init`.cwd(tmp.path).quiet()
       await $`git config user.name "Test"`.cwd(tmp.path).quiet()
       await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
       await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
 
       const { project: real } = await run((svc) => svc.fromDirectory(tmp.path))
-      expect(real.id).not.toBe(ProjectID.global)
+      expect(real.id).toBe(pre.id)
+      expect(real.vcs).toBe("git")
 
-      // 4. The session should have been migrated to the real project ID
+      // 4. The legacy global session should have been migrated to this project ID
       const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
       expect(row).toBeDefined()
       expect(row!.project_id).toBe(real.id)

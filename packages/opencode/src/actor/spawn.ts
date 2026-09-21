@@ -821,6 +821,22 @@ export const layer = Layer.effect(
     const spawnSubagent = Effect.fn("Actor.spawnSubagent")(function* (input: SpawnInput) {
       const actorID = yield* actorReg.allocateActorID(input.sessionID, input.agentType)
 
+      // Capture ALS Instance for the work fiber — same defense as the stall
+      // watchdog. Without this, a detached fiber can lose Instance and fall back
+      // to an unsafe worktree (historically "/") when inserting reminders (EVB-20260905).
+      const instanceRef =
+        input.cwd != null
+          ? yield* Effect.promise(() => Instance.provide({ directory: input.cwd!, fn: () => Instance.current })).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+          : yield* Effect.sync(() => {
+              try {
+                return Instance.current
+              } catch {
+                return undefined
+              }
+            })
+
       const watermark = input.context === "full" ? yield* session.lastMainMessageID(input.sessionID) : undefined
 
       yield* actorReg.register({
@@ -869,6 +885,7 @@ export const layer = Layer.effect(
         task_id: input.task_id,
         gateEligible,
         format: input.format,
+        ...(instanceRef ? { instanceRef } : {}),
       })
       if (input.onReady) yield* Effect.ignore(input.onReady({ actorID, sessionID: input.sessionID }))
       if (!input.background) yield* Fiber.join(fiber).pipe(Effect.ignore)

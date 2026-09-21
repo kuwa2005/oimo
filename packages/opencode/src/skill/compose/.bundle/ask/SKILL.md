@@ -13,10 +13,13 @@ This means: **the loop only ends when the task is actually complete** — never 
 
 ## How to Ask
 
-- **Structured options** — when the decision has known choices, list them as `options` (each with a short `label` and a `description`).
+- **Batch by default** — put every currently known open decision into **one** `question` call (`questions: [...]`). Prefer 1 round; a 2nd round only for genuinely new unknowns revealed by the answers. Do not drip-feed one question per turn when you already know the rest of the set.
+- **Memory before asking** — read project memory / checkpoint first. Facts already known become **Recommended** options (or stated defaults the user can correct), not fresh open questions.
+- **Structured options** — when the decision has known choices, list them as `options` (each with a short `label` and a `description`). Mark the default with `Recommended` in the label or description when you have a memory-backed or strong default.
 - **Open-ended** — when you can't enumerate good options, pass **empty `options`**. An empty options list renders as a free-text prompt: the user types whatever they want. So anything you'd normally ask in prose can be asked through `question` instead.
-- **One question per concern** — don't bundle unrelated decisions; ask them as separate questions (or separate calls).
+- **One concern per question entry** — don't bundle unrelated decisions into a single `question` string; use separate entries in the same call.
 - **Don't repeat the question in prose** — the tool already renders it. Just call the tool.
+- **Simple tasks stay small** — for a single-document or similarly scoped task, aim for ≤1 question call (often Requirements Lock alone after defaults).
 
 ```
 question({

@@ -200,26 +200,20 @@ export const layer: Layer.Layer<
       type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
 
       const data: DiscoveryResult = yield* Effect.gen(function* () {
-        if (Flag.MIMOCODE_DISABLE_GIT) {
-          return {
-            id: ProjectID.global,
-            worktree: directory,
-            sandbox: directory,
-            vcs: fakeVcs,
-          }
+        // Path-scoped project for non-git (or git-disabled) directories so evolve /
+        // skills / sessions do not all collapse into the shared `global` row.
+        // See EVB-20260902. Keep `global` only for true shared / unsafe anchors.
+        const pathScoped = (): DiscoveryResult => {
+          const id = resolveProjectId(directory)
+          return { id, worktree: directory, sandbox: directory, vcs: fakeVcs }
         }
+
+        if (Flag.MIMOCODE_DISABLE_GIT) return pathScoped()
 
         const dotgitMatches = yield* fs.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
         const dotgit = dotgitMatches[0]
 
-        if (!dotgit) {
-          return {
-            id: ProjectID.global,
-            worktree: "/",
-            sandbox: "/",
-            vcs: fakeVcs,
-          }
-        }
+        if (!dotgit) return pathScoped()
 
         // Refuse to anchor snapshots at the user's home directory or a filesystem root.
         // Anchoring there makes git's pathspec walk cover the entire user tree on every

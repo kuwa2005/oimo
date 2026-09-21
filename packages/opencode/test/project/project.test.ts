@@ -103,11 +103,16 @@ describe("Project.fromDirectory", () => {
     expect(await Bun.file(idFile).exists()).toBe(true)
   })
 
-  test("returns global for non-git directory", () =>
+  test("registers a path-scoped project for non-git directory", () =>
     withTmpdirOutsideGit(async () => {
       await using tmp = await tmpdir()
-      const { project } = await run((svc) => svc.fromDirectory(tmp.path))
-      expect(project.id).toBe(ProjectID.global)
+      const { project, sandbox } = await run((svc) => svc.fromDirectory(tmp.path))
+      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(tmp.path)
+      expect(project.vcs).toBeUndefined()
+      const again = await run((svc) => svc.fromDirectory(tmp.path))
+      expect(again.project.id).toBe(project.id)
     }),
   )
 

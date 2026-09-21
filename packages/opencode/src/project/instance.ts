@@ -131,6 +131,32 @@ export const Instance = {
           init: input.init,
         }),
       )
+    } else {
+      // External `git init` (or first path-scoped registration) must not leave a
+      // long-lived server stuck on a stale non-git / global Instance (EVB-20260902).
+      const cached = await existing.catch(() => undefined)
+      if (cached && cached.project.vcs !== "git") {
+        const refreshed = await project.runPromise((svc) => svc.fromDirectory(directory))
+        if (
+          refreshed.project.id !== cached.project.id ||
+          refreshed.project.vcs !== cached.project.vcs ||
+          refreshed.sandbox !== cached.worktree
+        ) {
+          Log.Default.info("refreshing instance after project/vcs change", {
+            directory,
+            from: cached.project.id,
+            to: refreshed.project.id,
+            vcs: refreshed.project.vcs,
+          })
+          await Instance.reload({
+            directory,
+            init: input.init,
+            project: refreshed.project,
+            worktree: refreshed.sandbox,
+          })
+          existing = cache.get(directory)!
+        }
+      }
     }
     const ctx = await existing
     enter(directory)
