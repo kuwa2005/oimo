@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   build-cli:
-    runs-on: ubuntu-latest
+    # Pin the image so GitHub's ubuntu-latest→26 migration notice does not fire
+    # on every release job. Bump deliberately when ready to validate on 26.x.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -57,8 +59,9 @@ jobs:
           MIMO_FDS_BUCKET: ${{ secrets.MIMO_FDS_BUCKET }}
           MIMO_FDS_PREFIX: ${{ secrets.MIMO_FDS_PREFIX }}
 
+      # v7 runs on Node 24 (v4 still targets Node 20 and annotates every job).
       - name: Upload release asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: oimo-${{ matrix.target }}
           path: |
@@ -68,7 +71,7 @@ jobs:
 
   assemble:
     needs: build-cli
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -80,8 +83,9 @@ jobs:
       - name: Compute version from tag
         run: echo "MIMOCODE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
+      # Keep major in lockstep with upload-artifact@v7 (Node 24).
       - name: Download built archives
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: oimo-*
           path: release-assets
@@ -101,8 +105,9 @@ jobs:
             bun script/changelog.ts --to HEAD --print > /tmp/release-notes.md
           fi
 
+      # v3 runs on Node 24; v2 is the final Node 20 line and annotates assemble.
       - name: Create GitHub release with assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           files: release-assets/*

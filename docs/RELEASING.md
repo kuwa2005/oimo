@@ -97,23 +97,27 @@ assemble (アーカイブ集約 → SHA256SUMS 生成 → リリースノート 
 - 各ジョブは `MIMOCODE_TARGETS=<target>` で自分のターゲットだけをビルドします。
   `MIMOCODE_RELEASE=1` でアーカイブ (`oimo-<os>-<arch>[-baseline][-musl].{tar.gz|zip}`) を生成し、
   `MIMOCODE_SKIP_UPLOAD=1` で **gh release へのアップロードを抑止**します
-  (この時点ではリリースが未作成のため)。アーカイブは `actions/upload-artifact` で assemble へ渡します。
+  (この時点ではリリースが未作成のため)。アーカイブは `actions/upload-artifact@v7` で assemble へ渡します。
 - FDS シークレットがあれば各ジョブが自分のアセットを FDS ミラーへもアップロードします
   (SKIP_UPLOAD の影響を受けません)。
 - `packages/opencode/script/targets.ts` がターゲット定義・名前計算を一元管理します
   (`MIMOCODE_TARGETS` 未指定なら従来どおり全ターゲットを 1 プロセスでビルド — ローカルリリースビルド互換)。
+- Runner は `ubuntu-24.04` 固定（`ubuntu-latest` の 26 移行 notice を避ける）。
 
 ### assemble
 
-1. `actions/download-artifact` で全アーカイブを `release-assets/` に集約。
+1. `actions/download-artifact@v7` で全アーカイブを `release-assets/` に集約。
 2. `script/checksums.ts` で **SHA256SUMS を集約生成** (`sha256sum -c` 互換)。matrix で分散ビルドしても
    チェックサムは単一の正にまとまります。
 3. `script/changelog.ts` でリリースノートを生成 (git log、conventional commit グループ化。
    範囲は直前の `v*` タグから HEAD)。
-4. **softprops/action-gh-release** でリリースを作成・公開 (`draft: false`)。
+4. **softprops/action-gh-release@v3** でリリースを作成・公開 (`draft: false`)。
    12 アーカイブ + `SHA256SUMS` を添付します。アセットが欠けている場合は失敗します
    (`fail_on_unmatched_files: true`)。
 5. npm 公開は行いません（この fork は GitHub Releases のみ）。
+
+Actions はいずれも Node 24 ランタイム (`upload/download-artifact@v7`, `action-gh-release@v3`)。
+Node 20 系 (`@v4` / `@v2`) は GitHub が warning annotation を付けるため使わない。
 
 ## アセットとチェックサム・インストーラー検証
 
