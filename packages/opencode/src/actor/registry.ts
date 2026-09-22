@@ -1,6 +1,7 @@
 import { Effect, Layer, Context, Schedule } from "effect"
 import { Database, inArray, eq, and, lte, ne, sql } from "@/storage"
 import { Bus } from "@/bus"
+import { InstanceRef } from "@/effect/instance-ref"
 import type { SessionID, MessageID } from "@/session/schema"
 import { ActorRegistryTable } from "./actor.sql"
 import { SessionTable } from "@/session/session.sql"
@@ -510,17 +511,26 @@ export const layer: Layer.Layer<Service, never, Bus.Service> = Layer.effect(
           `)
         }),
       )
-      for (const row of orphaned) {
-        const entry = fromRow(row)
-        yield* bus.publish(Events.ActorStatusChanged, {
-          sessionID: entry.sessionID,
-          actorID: entry.actorID,
-          status: "idle",
-          lastOutcome: "failure",
-          turnCount: entry.turnCount,
-          lastTurnTime: entry.lastTurnTime,
-          error: "orphaned: process restarted",
-        })
+      // Bus.publish needs InstanceState (directory/project). CLI paths that boot
+      // AppRuntime without an Instance — notably `oimo upgrade` / `uninstall` —
+      // must still reclaim orphans in SQLite; skip the in-process fan-out when
+      // there is no session to notify (EVB-20260922).
+      const instance = yield* InstanceRef
+      if (instance) {
+        for (const row of orphaned) {
+          const entry = fromRow(row)
+          yield* bus.publish(Events.ActorStatusChanged, {
+            sessionID: entry.sessionID,
+            actorID: entry.actorID,
+            status: "idle",
+            lastOutcome: "failure",
+            turnCount: entry.turnCount,
+            lastTurnTime: entry.lastTurnTime,
+            error: "orphaned: process restarted",
+          })
+        }
+      } else {
+        log.info("orphan recovery: bus publish skipped (no instance)", { orphaned: orphaned.length })
       }
     }
     log.info("orphan recovery complete", { instanceID, orphaned: orphaned.length })

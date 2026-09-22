@@ -1,7 +1,7 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
-import { AppRuntime } from "@/effect/app-runtime"
+import { ManagedRuntime } from "effect"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
 import fs from "fs/promises"
@@ -22,6 +22,8 @@ interface RemovalTargets {
   shellConfig: string | null
   binary: string | null
 }
+
+const InstallationRuntime = ManagedRuntime.make(Installation.defaultLayer)
 
 export const UninstallCommand = {
   command: "uninstall",
@@ -58,7 +60,7 @@ export const UninstallCommand = {
     UI.empty()
     prompts.intro("Uninstall Open Mimo Code")
 
-    const method = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
+    const method = await InstallationRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
     prompts.log.info(`Installation method: ${method}`)
 
     const targets = await collectRemovalTargets(args, method)

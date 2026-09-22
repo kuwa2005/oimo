@@ -629,6 +629,55 @@ describe("ActorRegistry", () => {
         expect(recovered!.lastError).toBe("orphaned: process restarted")
       })
     })
+
+    test("orphan recovery without Instance ALS does not throw (upgrade CLI)", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      let taskId: SessionID
+      let parentId: SessionID
+
+      await withRegistry(tmp.path, async (rt) => {
+        const parent = await rt.runPromise(Session.Service.use((svc) => svc.create()))
+        parentId = parent.id
+        taskId = SessionID.descending()
+        await rt.runPromise(
+          ActorRegistry.Service.use((svc) =>
+            svc.register({
+              sessionID: parent.id,
+              actorID: taskId,
+              mode: "subagent",
+              agent: "explore",
+              description: "No-instance orphan",
+              contextMode: "none",
+              background: false,
+              lifecycle: "ephemeral",
+            }),
+          ),
+        )
+        await rt.runPromise(
+          ActorRegistry.Service.use((svc) => svc.updateStatus(parent.id, taskId, { status: "running" })),
+        )
+      })
+
+      Database.use((db) =>
+        db
+          .update(ActorRegistryTable)
+          .set({ instance_id: "stale-process" })
+          .where(and(eq(ActorRegistryTable.session_id, parentId!), eq(ActorRegistryTable.actor_id, taskId!)))
+          .run(),
+      )
+
+      // No Instance.provide — mirrors `oimo upgrade` booting layers without ALS.
+      const rt = ManagedRuntime.make(ActorRegistry.defaultLayer)
+      try {
+        const recovered = await rt.runPromise(ActorRegistry.Service.use((svc) => svc.get(parentId!, taskId!)))
+        expect(recovered!.status).toBe("idle")
+        expect(recovered!.lastOutcome).toBe("failure")
+        expect(recovered!.lastError).toBe("orphaned: process restarted")
+      } finally {
+        await rt.dispose()
+      }
+    })
   })
 
   describe("agentTypeFor", () => {
