@@ -310,14 +310,19 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
-      const hasKey = iife(() => {
-        if (input.env.some((item) => env[item])) return true
-        return false
-      })
-      const ok =
-        hasKey ||
-        Boolean(yield* dep.auth(input.id)) ||
-        Boolean((yield* dep.config()).provider?.["opencode"]?.options?.apiKey)
+      // Match anomalyco/opencode OpencodePlugin `hasKey`:
+      // OPENCODE_API_KEY || Console OAuth connected || body/settings apiKey.
+      // Config.loadActiveOrgConfig sets MIMOCODE_CONSOLE_TOKEN when an Account
+      // org is active — that is oimo's `connected` equivalent. Upstream then
+      // uses the OAuth access token as the Zen Bearer (not `public`).
+      const envKey = input.env.map((item) => env[item]).find(Boolean)
+      const authInfo = yield* dep.auth(input.id)
+      const authKey =
+        authInfo?.type === "api" ? authInfo.key : authInfo?.type === "oauth" ? authInfo.access : undefined
+      const configKey = (yield* dep.config()).provider?.["opencode"]?.options?.apiKey
+      const consoleToken = env["MIMOCODE_CONSOLE_TOKEN"]
+      const connected = Boolean(consoleToken)
+      const ok = Boolean(envKey || authKey || configKey || connected)
 
       // OpenCode Zen free/public tier (cost.input === 0) stays available
       // unauthenticated. Without a subscription/key, hide paid models and the
@@ -333,9 +338,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         }
       }
 
+      // Prefer explicit Zen API key / Auth; else Console OAuth access token
+      // (upstream SessionRunnerModel.apiKey uses credential.access).
+      const apiKey = envKey || authKey || (typeof configKey === "string" ? configKey : undefined) || consoleToken
       return {
         autoload: Object.keys(input.models).length > 0,
-        options: ok ? {} : { apiKey: "public" },
+        options: ok ? (apiKey ? { apiKey } : {}) : { apiKey: "public" },
       }
     }),
     openai: () =>
@@ -1273,15 +1281,19 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     }
   }
 
-  // OpenCode Zen exposes Big Pickle as two selectable lanes:
-  // - Free: zero-config public pool (apiKey "public"), no OPENCODE_API_KEY required
-  // - API: authenticated Zen key pool — only listed when a key is configured
+  // OpenCode Zen exposes Big Pickle as two selectable lanes (oimo UX):
+  // - Free: anonymous `public` pool when no key; with Console/API auth the
+  //   provider-level key wins (upstream single-lane behaviour — do not pin
+  //   model.options.apiKey to "public" or authenticated sessions stay on the
+  //   FreeTierError-prone anonymous pool).
+  // - API: always the authenticated Zen key pool — only listed when a key
+  //   / Console session is configured (see opencode custom loader).
   if (provider.id === "opencode" && models["big-pickle"]) {
     const base = models["big-pickle"]
     models["big-pickle"] = {
       ...base,
       name: "Big Pickle(Free)",
-      options: { ...base.options, apiKey: "public" },
+      options: { ...base.options },
     }
     models["big-pickle-api"] = {
       ...base,

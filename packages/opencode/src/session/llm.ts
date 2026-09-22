@@ -23,7 +23,8 @@ import * as Session from "@/session/session"
 import { migrateProjectMemory } from "./checkpoint-paths"
 import { ProjectID } from "@/project/schema"
 import { Auth } from "@/auth"
-import { providerRequestHeaders } from "./provider-headers"
+import { providerRequestHeaders, currentProjectID } from "./provider-headers"
+import { Flag } from "@/flag/flag"
 import { EffectBridge } from "@/effect"
 import { Global } from "@/global"
 import * as Option from "effect/Option"
@@ -543,7 +544,11 @@ const live: Layer.Layer<
         },
       )
 
-      const tools = resolveTools(input)
+      // Stable tool order matches anomalyco/opencode `LLMRequestPrep` (localeCompare).
+      // Zen free-tier classifiers historically fingerprint the tools[] payload.
+      const tools = Object.fromEntries(
+        Object.entries(resolveTools(input)).toSorted(([a], [b]) => a.localeCompare(b)),
+      )
       const requestedActiveTools = new Set(input.activeTools ?? Object.keys(tools))
       const activeTools = Object.keys(tools).filter((name) => name !== "invalid" && requestedActiveTools.has(name))
 
@@ -763,13 +768,8 @@ const live: Layer.Layer<
           sessionID: input.sessionID,
           requestID: input.user.id,
           parentSessionID: input.parentSessionID,
-          projectID: (() => {
-            try {
-              return Instance.current?.project?.id
-            } catch {
-              return undefined
-            }
-          })(),
+          client: Flag.MIMOCODE_CLIENT,
+          projectID: currentProjectID(),
           extra: { ...input.model.headers, ...headers },
         }),
         // AI SDK's internal retry loop is SILENT — it emits no events and does

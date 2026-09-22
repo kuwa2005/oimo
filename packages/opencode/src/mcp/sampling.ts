@@ -4,7 +4,8 @@ import { CreateMessageRequestSchema, ErrorCode, McpError } from "@modelcontextpr
 import { Config } from "@/config"
 import { Permission } from "@/permission"
 import { Provider, ProviderTransform, ModelCapability } from "@/provider"
-import { providerRequestHeaders } from "@/session/provider-headers"
+import { providerRequestHeaders, currentProjectID } from "@/session/provider-headers"
+import { Flag } from "@/flag/flag"
 import { Log } from "@/util"
 import type { SessionID } from "@/session/schema"
 
@@ -751,6 +752,8 @@ export const handle = Effect.fn("MCP.sampling.handle")(function* (input: HandleI
         headers: providerRequestHeaders({
           providerID: model.providerID,
           sessionID: input.sessionID,
+          projectID: currentProjectID(),
+          client: Flag.MIMOCODE_CLIENT,
           extra: model.headers,
         }),
         abortSignal: providerSignal,

@@ -10,7 +10,8 @@ import * as Session from "@/session/session"
 import { Agent } from "@/agent/agent"
 import { Provider } from "@/provider"
 import { ProviderTransform } from "@/provider"
-import { providerRequestHeaders } from "@/session/provider-headers"
+import { providerRequestHeaders, currentProjectID } from "@/session/provider-headers"
+import { Flag } from "@/flag/flag"
 import { PartID, type SessionID } from "@/session/schema"
 import { Bus } from "@/bus"
 import { Metrics } from "@/metrics"
@@ -178,6 +179,8 @@ const publishAfterTurn = Effect.fn("FrictionUserFeedback.publishAfterTurn")(func
       headers: providerRequestHeaders({
         providerID: mdl.providerID,
         sessionID: input.sessionID,
+        projectID: currentProjectID(),
+        client: Flag.MIMOCODE_CLIENT,
         extra: mdl.headers,
       }),
       maxRetries: 1,

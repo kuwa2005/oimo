@@ -2374,7 +2374,9 @@ test("OpenCode Zen splits Big Pickle into Free and API lanes", () => {
 
   const models = Provider.fromModelsDevProvider(provider).models
   expect(models["big-pickle"]?.name).toBe("Big Pickle(Free)")
-  expect(models["big-pickle"]?.options.apiKey).toBe("public")
+  // Free lane no longer pins apiKey:"public" at model level — provider-level
+  // public/key (OpencodePlugin hasKey) decides, matching upstream single-lane.
+  expect(models["big-pickle"]?.options.apiKey).toBeUndefined()
   expect(models["big-pickle"]?.api.id).toBe("big-pickle")
   expect(models["big-pickle-api"]?.name).toBe("Big Pickle(API)")
   expect(models["big-pickle-api"]?.api.id).toBe("big-pickle")

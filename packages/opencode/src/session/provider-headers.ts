@@ -10,12 +10,17 @@
  * with semver >= {@link ZEN_COMPAT_VERSION} (HTTP 426 otherwise). oimo's
  * own package version is independent (0.x), so Zen UA reports at least
  * that floor — not the fork version.
+ *
+ * Floor tracks anomalyco/opencode release `v1.18.32` (2026-09-21), the
+ * current official CLI identity for Zen.
  */
 
 import semver from "semver"
+import { Instance } from "@/project/instance"
+import { Flag } from "@/flag/flag"
 
 /** Minimum OpenCode version Console free tier accepts in User-Agent. */
-export const ZEN_COMPAT_VERSION = "1.18.0"
+export const ZEN_COMPAT_VERSION = "1.18.32"
 
 function installationVersion(): string {
   return typeof MIMOCODE_VERSION === "string" ? MIMOCODE_VERSION : "local"
@@ -39,6 +44,25 @@ export function zenUserAgent(version = installationVersion()): string {
 
 export const OIMO_USER_AGENT = oimoUserAgent()
 export const ZEN_USER_AGENT = zenUserAgent()
+
+/** Active project id for Zen `x-opencode-project` (undefined outside Instance). */
+export function currentProjectID(): string | undefined {
+  try {
+    return Instance.current?.project?.id
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Surface id for `x-opencode-client`.
+ * Prefer explicit `client` arg, else {@link Flag.MIMOCODE_CLIENT}
+ * (`OPENCODE_CLIENT` → `MIMOCODE_CLIENT` → `cli`).
+ */
+export function resolveOpencodeClient(explicit?: string): string {
+  if (typeof explicit === "string" && explicit.length > 0) return explicit
+  return Flag.MIMOCODE_CLIENT
+}
 
 export type ProviderHeaderInput = {
   providerID: string
@@ -72,7 +96,7 @@ function compact(headers: Record<string, string | undefined>): Record<string, st
  */
 export function providerRequestHeaders(input: ProviderHeaderInput): Record<string, string> {
   const extra = compact(input.extra ?? {})
-  const client = input.client ?? process.env["MIMOCODE_CLIENT"] ?? "cli"
+  const client = resolveOpencodeClient(input.client)
   const version = installationVersion()
 
   if (input.providerID.startsWith("opencode")) {

@@ -24,7 +24,7 @@ import {
   generateText,
   wrapLanguageModel,
 } from "ai"
-import { providerRequestHeaders } from "./provider-headers"
+import { providerRequestHeaders, currentProjectID } from "./provider-headers"
 import type { JSONObject, JSONSchema7 } from "@ai-sdk/provider"
 import { SessionPrune } from "./prune"
 import { SessionCheckpoint } from "./checkpoint"
@@ -913,6 +913,8 @@ export const layer = Layer.effect(
           headers: providerRequestHeaders({
             providerID: mdl.providerID,
             sessionID: input.sessionID,
+            projectID: currentProjectID(),
+            client: Flag.MIMOCODE_CLIENT,
             extra: mdl.headers,
           }),
           maxRetries: 1,

@@ -5,23 +5,53 @@ import {
   ZEN_USER_AGENT,
   oimoUserAgent,
   providerRequestHeaders,
+  resolveOpencodeClient,
   zenCompatVersion,
   zenUserAgent,
 } from "../../src/session/provider-headers"
 
 const ORIGINAL_CLIENT = process.env.MIMOCODE_CLIENT
+const ORIGINAL_OPENCODE_CLIENT = process.env.OPENCODE_CLIENT
 
 describe("zenCompatVersion", () => {
   test("raises fork / local versions to the Console free-tier floor", () => {
     expect(zenCompatVersion("0.3.0")).toBe(ZEN_COMPAT_VERSION)
     expect(zenCompatVersion("local")).toBe(ZEN_COMPAT_VERSION)
     expect(zenCompatVersion("1.17.99")).toBe(ZEN_COMPAT_VERSION)
+    expect(zenCompatVersion("1.18.0")).toBe(ZEN_COMPAT_VERSION)
   })
 
   test("keeps versions already at or above the floor", () => {
     expect(zenCompatVersion(ZEN_COMPAT_VERSION)).toBe(ZEN_COMPAT_VERSION)
-    expect(zenCompatVersion("1.18.19")).toBe("1.18.19")
+    expect(zenCompatVersion("1.18.32")).toBe("1.18.32")
+    expect(zenCompatVersion("1.18.33")).toBe("1.18.33")
     expect(zenCompatVersion("2.0.0")).toBe("2.0.0")
+  })
+})
+
+describe("resolveOpencodeClient", () => {
+  afterEach(() => {
+    if (ORIGINAL_CLIENT === undefined) delete process.env.MIMOCODE_CLIENT
+    else process.env.MIMOCODE_CLIENT = ORIGINAL_CLIENT
+    if (ORIGINAL_OPENCODE_CLIENT === undefined) delete process.env.OPENCODE_CLIENT
+    else process.env.OPENCODE_CLIENT = ORIGINAL_OPENCODE_CLIENT
+  })
+
+  test("defaults to cli", () => {
+    delete process.env.MIMOCODE_CLIENT
+    delete process.env.OPENCODE_CLIENT
+    expect(resolveOpencodeClient()).toBe("cli")
+  })
+
+  test("OPENCODE_CLIENT wins over MIMOCODE_CLIENT", () => {
+    process.env.MIMOCODE_CLIENT = "desktop"
+    process.env.OPENCODE_CLIENT = "acp"
+    expect(resolveOpencodeClient()).toBe("acp")
+  })
+
+  test("explicit arg wins over env", () => {
+    process.env.OPENCODE_CLIENT = "desktop"
+    expect(resolveOpencodeClient("app")).toBe("app")
   })
 })
 
@@ -29,10 +59,13 @@ describe("providerRequestHeaders", () => {
   afterEach(() => {
     if (ORIGINAL_CLIENT === undefined) delete process.env.MIMOCODE_CLIENT
     else process.env.MIMOCODE_CLIENT = ORIGINAL_CLIENT
+    if (ORIGINAL_OPENCODE_CLIENT === undefined) delete process.env.OPENCODE_CLIENT
+    else process.env.OPENCODE_CLIENT = ORIGINAL_OPENCODE_CLIENT
   })
 
   test("Zen / big-pickle: official-compatible identity headers", () => {
     delete process.env.MIMOCODE_CLIENT
+    delete process.env.OPENCODE_CLIENT
     const headers = providerRequestHeaders({
       providerID: "opencode",
       sessionID: "ses_abc",
@@ -54,12 +87,23 @@ describe("providerRequestHeaders", () => {
   })
 
   test("Zen: x-opencode-client follows MIMOCODE_CLIENT (default cli)", () => {
+    delete process.env.OPENCODE_CLIENT
     process.env.MIMOCODE_CLIENT = "desktop"
     const headers = providerRequestHeaders({
       providerID: "opencode",
       sessionID: "ses_1",
     })
     expect(headers["x-opencode-client"]).toBe("desktop")
+  })
+
+  test("Zen: OPENCODE_CLIENT aliases upstream flag", () => {
+    delete process.env.MIMOCODE_CLIENT
+    process.env.OPENCODE_CLIENT = "app"
+    const headers = providerRequestHeaders({
+      providerID: "opencode",
+      sessionID: "ses_1",
+    })
+    expect(headers["x-opencode-client"]).toBe("app")
   })
 
   test("Zen: explicit client arg wins over env", () => {
@@ -74,6 +118,7 @@ describe("providerRequestHeaders", () => {
 
   test("Zen: providerID prefix match (opencode-go)", () => {
     delete process.env.MIMOCODE_CLIENT
+    delete process.env.OPENCODE_CLIENT
     const headers = providerRequestHeaders({
       providerID: "opencode-go",
       sessionID: "ses_1",
@@ -132,6 +177,7 @@ describe("providerRequestHeaders", () => {
 
   test("omits empty optional fields", () => {
     delete process.env.MIMOCODE_CLIENT
+    delete process.env.OPENCODE_CLIENT
     const zen = providerRequestHeaders({ providerID: "opencode" })
     expect(zen["x-opencode-session"]).toBeUndefined()
     expect(zen["x-opencode-request"]).toBeUndefined()

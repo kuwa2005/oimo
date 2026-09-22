@@ -446,8 +446,12 @@ export const Flag = {
   get MIMOCODE_PLUGIN_META_FILE() {
     return process.env["MIMOCODE_PLUGIN_META_FILE"]
   },
+  /**
+   * Surface id for Zen `x-opencode-client`.
+   * Upstream reads `OPENCODE_CLIENT`; oimo also accepts `MIMOCODE_CLIENT`.
+   */
   get MIMOCODE_CLIENT() {
-    return process.env["MIMOCODE_CLIENT"] ?? "cli"
+    return process.env["OPENCODE_CLIENT"] ?? process.env["MIMOCODE_CLIENT"] ?? "cli"
   },
 
   // Defaults to false. Set MIMOCODE_COMPLIANCE=true (or 1), or pass --compliance,
