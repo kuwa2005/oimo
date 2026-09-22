@@ -531,10 +531,10 @@ export const BashTool = Tool.define(
       const worktree = Instance.worktree
       const cached = gitIdentityCache.get(worktree)
       if (cached) return cached
-      // Non-git projects set worktree to "/". There is no project repo whose
-      // identity we could propagate, and whatever repo a git command does run in
-      // has its own config — which injected env would override. Inject nothing.
-      if (worktree === "/") {
+      // Non-git projects have no VCS-backed worktree identity to propagate.
+      // whatever repo a git command does run in has its own config — which
+      // injected env would override. Inject nothing.
+      if (Instance.project.vcs !== "git") {
         const none: { name?: string; email?: string } = {}
         gitIdentityCache.set(worktree, none)
         return none

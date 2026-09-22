@@ -140,7 +140,7 @@ const ReposPlanCommand = cmd({
       })
       .option("seed", { type: "string", describe: "起点 Repository id" })
       .option("title", { type: "string", describe: "計画タイトル" })
-      .option("session", { type: "string", describe: "Change set を紐づける session id", default: "cli" })
+      .option("session", { type: "string", describe: "Change set を紐づけるセッション ID", default: "cli" })
       .option("approve", { type: "boolean", default: false, describe: "計画を承認し execution scope を設定" }),
   async handler(args) {
     await withCwd(async () => {
@@ -264,7 +264,7 @@ const ReposApproveCommand = cmd({
   command: "approve",
   describe: "planned の Change set を承認する（TUI /repos と同じ session DB）",
   builder: (yargs: Argv) =>
-    yargs.option("session", { type: "string", default: "cli", describe: "session id" }),
+    yargs.option("session", { type: "string", default: "cli", describe: "セッション ID" }),
   async handler(args) {
     await withCwd(async () => {
       const info = await RepoWorkspace.Runtime.load(Instance.directory)
@@ -287,7 +287,7 @@ const ReposRejectCommand = cmd({
   aliases: ["cancel"],
   describe: "Change set を cancelled にする",
   builder: (yargs: Argv) =>
-    yargs.option("session", { type: "string", default: "cli", describe: "session id" }),
+    yargs.option("session", { type: "string", default: "cli", describe: "セッション ID" }),
   async handler(args) {
     await withCwd(async () => {
       const next = RepoWorkspace.Plan.rejectChangeSet(String(args.session))

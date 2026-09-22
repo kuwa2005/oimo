@@ -99,12 +99,12 @@ describe("release build matrix: release.yml", () => {
 
   test("T3e: assemble regenerates aggregate SHA256SUMS from downloaded artifacts", () => {
     expect(yml).toContain("checksums.ts release-assets/*")
-    expect(yml).toContain("download-artifact@v4")
+    expect(yml).toContain("download-artifact@v7")
     expect(yml).toContain("pattern: oimo-*")
   })
 
   test("T3f: softprops/action-gh-release creates the release with assets", () => {
-    expect(yml).toContain("softprops/action-gh-release@v2")
+    expect(yml).toContain("softprops/action-gh-release@v3")
     expect(yml).toContain("files: release-assets/*")
     expect(yml).toContain("draft: false")
     expect(yml).toContain("contents: write")
@@ -117,7 +117,7 @@ describe("release build matrix: release.yml", () => {
   })
 
   test("T3h: archives flow through upload/download artifacts", () => {
-    expect(yml).toContain("upload-artifact@v4")
+    expect(yml).toContain("upload-artifact@v7")
     expect(yml).toContain("merge-multiple: true")
     expect(yml).toContain("if-no-files-found: error")
   })

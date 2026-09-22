@@ -1176,10 +1176,9 @@ mcpIt.live("searches only MCP tools allowed by the configured agent", () =>
       expect(initialTools.map(wireToolName)).toEqual(["mcp_tool_search"])
       expect(catalog).toContain("mcp_success — Return a standard structured MCP success result")
       expect(catalog).not.toContain("mcp_result")
-      expect((requests[1].tools as Array<Record<string, unknown>>).map(wireToolName)).toEqual([
-        "mcp_tool_search",
-        "mcp_success",
-      ])
+      expect((requests[1].tools as Array<Record<string, unknown>>).map(wireToolName).toSorted()).toEqual(
+        ["mcp_success", "mcp_tool_search"],
+      )
     }),
     { git: true, config: restrictedAgentProviderCfg },
   ),

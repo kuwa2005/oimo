@@ -61,4 +61,13 @@ describe("resolveProjectId", () => {
     expect(cached.trim()).toBe(id)
     await fs.rm(tmp, { recursive: true })
   })
+
+  test("creates missing directory when writing path-scoped id", async () => {
+    const tmp = path.join(os.tmpdir(), `mimo-pid-missing-${Date.now()}-${Math.random().toString(16).slice(2)}`)
+    const id = resolveProjectId(tmp)
+    expect(id).toMatch(/^[0-9a-f]{8}-/i)
+    const cached = await fs.readFile(path.join(tmp, ".oimo-project-id"), "utf-8")
+    expect(cached.trim()).toBe(id)
+    await fs.rm(tmp, { recursive: true })
+  })
 })

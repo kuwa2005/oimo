@@ -144,7 +144,7 @@ describe("T5: release.yml static checks", () => {
     expect(yaml).toContain("MIMOCODE_SKIP_UPLOAD")
     expect(yaml).toContain("GH_REPO")
     expect(yaml).toContain("packages/opencode/script/build.ts")
-    expect(yaml).toContain("softprops/action-gh-release@v2")
+    expect(yaml).toContain("softprops/action-gh-release@v3")
     expect(yaml).toContain("does not publish to npm")
     expect(yaml).not.toContain("script/publish.ts")
     expect(yaml).not.toContain('if [ -z "$NPM_TOKEN" ]')

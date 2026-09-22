@@ -43,6 +43,14 @@ export function resolveProjectId(workingDir: string): ProjectID {
   const cached = readFileTrimmedOrNull(localFile)
   if (cached) return ProjectID.make(cached)
   const newId = crypto.randomUUID()
-  fs.writeFileSync(localFile, newId)
+  // Path-scoped ids persist under the working dir. Callers sometimes provide a
+  // directory that does not exist yet (deleted worktree re-provide, synthetic
+  // fixtures like /tmp/project) — create it so the write cannot ENOENT.
+  try {
+    fs.mkdirSync(workingDir, { recursive: true })
+    fs.writeFileSync(localFile, newId)
+  } catch {
+    // Unwritable / racing teardown: return an ephemeral id for this process.
+  }
   return ProjectID.make(newId)
 }
