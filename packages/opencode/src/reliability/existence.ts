@@ -29,6 +29,7 @@ const BINARY_SKIP = new Set([
   "sh",
   "cd",
   "echo",
+  "exit",
   "export",
   "set",
   "true",
@@ -174,7 +175,8 @@ export function checkCommand(
 
   for (const name of collectBinaryClaims(command)) {
     if (onPath(name)) continue
-    const hint = BINARY_HINTS[name] ?? `Ensure "${name}" is installed and on PATH before running this command.`
+    const hint = BINARY_HINTS[name]
+    if (!hint) continue
     findings.push({
       kind: "missing_binary",
       claim: name,
