@@ -19,7 +19,7 @@
 
 Open Mimo Code は、ターミナルネイティブの AI コーディングアシスタントです。コードの読み書き、コマンド実行、Git 操作に加えて、持続的なメモリシステムによってセッションをまたいでプロジェクトへの深い理解を維持し、**自分自身を進化させ続けます**。
 
-OpenCode Zen が無料のデフォルトチャネルとして組み込まれており、ゼロ設定ですぐに始められます。また、主要な LLM プロバイダーの API にも接続できます。
+OpenCode Zen が無料のデフォルトチャネルとして組み込まれており、**API キーなしで active 無料モデル（2026-11 時点 8 件、`big-pickle` 先頭）** を first-frame failover で使えます。主要 LLM プロバイダーの API にも接続できます。
 
 
 ---
@@ -47,7 +47,7 @@ oimo
 ```
 
 初回起動時に自動で設定を案内されます。対応しているオプション:
-- **OpenCode Zen（Big Pickle）** — 無料のデフォルトチャネル、設定不要
+- **OpenCode Zen（Auto Model 無料）** — `auto/free`（TUI: **Auto Model (無料)**）。Zen 無料プール + first-frame failover、設定不要（詳細は下記）
 - **Xiaomi MiMo プラットフォーム** — OAuth ログイン
 - **Codex (ChatGPT Pro/Plus)** — OpenAI OAuth ログイン
 - **Claude Code からのインポート** — 既存の認証をワンステップで移行
@@ -139,6 +139,20 @@ SQLite FTS5 全文検索を利用したセッション横断メモリ:
 - **タスク進捗** (`tasks/<id>/progress.md`) — タスクごとのログ
 
 メモリはセッション再開時に自動的に注入されるため、エージェントはプロジェクトのコンテキストを学び直す必要がありません。
+
+### Auto Model (無料)
+
+- **公開 ID:** `auto/free`（モデル選択: **Auto Model (無料)**）
+- **Zen 無料プール:** [`models.dev`](https://models.dev/api.json) の OpenCode active 無料モデル（2026-11 時点 **8 件**。例: `big-pickle`, `mimo-v2.6-flash-free`, `deepseek-v4.1-flash-free` 等。`mimo-v2.5-free` 等の deprecated ID は除外）
+- **first-frame failover:** 429 / 5xx / upstream 過負荷など、**最初の応答がコミットされる前**なら次の無料モデルへ自動切替（起動時は Big Pickle プローブ）
+- **ボーナス候補:** OpenRouter / NVIDIA NIM / Groq 等は `/free-setup` または `auto_free.fallbacks` で API キー設定時に追加
+- 詳細: [`docs/auto-free-fcc-sync.md`](docs/auto-free-fcc-sync.md) · 優先順検証: `bun script/sync-zen-free-preferred-order.ts`
+
+### セッションの再開（全プロジェクト）
+
+- **TUI:** `/sessions` または **Ctrl+X L** — 直近 30 日・全プロジェクトのルートセッションを一覧。行のフッターに **作業ディレクトリ** を表示。選択すると、必要なら **そのセッションの `directory` へ自動切替** してから会話を再開
+- **CLI:** `oimo session list` — 表またはピッカーで選択 → 別ディレクトリのセッションなら `oimo <path> --session <id>` で TUI 起動
+- **同一ディレクトリ:** `oimo --continue` / `-c` で直近セッション、`--warm` で要約継承の新規セッション
 
 ### インテリジェントコンテキスト管理
 
@@ -376,6 +390,8 @@ export PULSE_SERVER=tcp:127.0.0.1:4713
 
 設計原典は [`oimo進化指示書.md`](./oimo進化指示書.md)、安全・検証契約は [`docs/evolve/completion-instructions.md`](./docs/evolve/completion-instructions.md) を参照してください。
 
+**製品本体の改善バックログ**（1 要素 1 issue）: GitHub [`自己進化` ラベル](https://github.com/kuwa2005/oimo/issues?q=label%3A%E8%87%AA%E5%B7%B1%E9%80%B2%E5%8C%96)（例: #56 メモリ二重 Read、#57 自律上限 …）。
+
 ---
 
 ## 設定
@@ -556,7 +572,7 @@ bun turbo typecheck      # 型チェック
 
 ## OpenCode との関係
 
-Open Mimo Code は [OpenCode](https://github.com/anomalyco/opencode) のフォークとして構築されています。OpenCode の全コア機能（複数プロバイダー、TUI、LSP、MCP、プラグイン）を保持しつつ、持続的なメモリ、インテリジェントコンテキスト管理、サブエージェントオーケストレーション、ゴール駆動の自律ループ、compose ワークフロー、dream/distill による自己改善を追加しています。
+Open Mimo Code は [OpenCode](https://github.com/anomalyco/opencode) をベースに、[kuwa2005/oimo](https://github.com/kuwa2005/oimo) で継続開発しているフォークです（上流 [MiMo-Code](https://github.com/XiaomiMiMo/MiMo-Code) との差分取り込みも進めています）。OpenCode のコア（多プロバイダー、TUI、LSP、MCP、プラグイン）に加え、持続メモリ、Auto Model (無料)、全プロジェクトセッション再開、自己進化（`/evolve`）、SE/FDE 自律、Compose、マルチリポ等を載せています。
 
 **他製品との比較**（Cursor / Claude Code / Codex / 一般エージェントを含む）: [docs/oimo-differentiators.ja.md](docs/oimo-differentiators.ja.md)
 

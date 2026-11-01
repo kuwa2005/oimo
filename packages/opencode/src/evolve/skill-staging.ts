@@ -5,6 +5,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { redactSecrets, assertSafeForArtifact } from "./evidence"
+import { evolveRoot } from "./store"
 
 export type SkillStageResult =
   | { ok: true; stagedPath: string; warnings: string[] }
@@ -95,6 +96,46 @@ export async function activateStagedSkill(input: {
   await fs.mkdir(path.dirname(activeRoot), { recursive: true })
   await fs.cp(stagingRoot, activeRoot, { recursive: true, force: true })
   return { ok: true, stagedPath: activeRoot, warnings: v.warnings }
+}
+
+/**
+ * Copy evolve-scoped skills (project + shared global) into `<worktree>/.oimo/skills/`
+ * when the worktree copy is missing — fixes skill_search only indexing project-local skills.
+ */
+export async function mirrorEvolveSkillsToWorktree(input: { worktree: string; projectID: string }) {
+  const destRoot = path.join(input.worktree, ".oimo", "skills")
+  const sources = [
+    path.join(evolveRoot(input.projectID), "skills"),
+    ...(input.projectID === "global" ? [] : [path.join(evolveRoot("global"), "skills")]),
+  ]
+  const warnings: string[] = []
+  for (const srcRoot of sources) {
+    let entries: { name: string; isDirectory: () => boolean }[]
+    try {
+      entries = await fs.readdir(srcRoot, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const skillMd = path.join(srcRoot, entry.name, "SKILL.md")
+      try {
+        await fs.access(skillMd)
+      } catch {
+        continue
+      }
+      const dest = path.join(destRoot, entry.name)
+      const destMd = path.join(dest, "SKILL.md")
+      try {
+        await fs.access(destMd)
+        continue
+      } catch {
+        await fs.mkdir(dest, { recursive: true })
+        await fs.cp(path.join(srcRoot, entry.name), dest, { recursive: true })
+      }
+    }
+  }
+  return { ok: true as const, warnings }
 }
 
 /** Remove an activated skill (used by soft rollback when snapshot lacks the skill tree). */

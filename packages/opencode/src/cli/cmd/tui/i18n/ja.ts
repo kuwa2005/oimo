@@ -113,7 +113,7 @@ export const dict = {
   "tui.tips.new_session":
     "{highlight}Ctrl+X N{/highlight} または {highlight}/new{/highlight} で新しい会話セッションを開始します",
   "tui.tips.sessions":
-    "{highlight}/sessions{/highlight} または {highlight}Ctrl+X L{/highlight} で過去の会話を一覧表示・継続します",
+    "{highlight}/sessions{/highlight} または {highlight}Ctrl+X L{/highlight} で全プロジェクトの過去セッションを一覧し、作業ディレクトリを移して再開します",
   "tui.tips.compact": "{highlight}/compact{/highlight} でコンテキスト上限近くの長い会話を要約できます",
   "tui.tips.export":
     "{highlight}Ctrl+X X{/highlight} または {highlight}/export{/highlight} で会話を Markdown として保存します",
@@ -302,6 +302,7 @@ export const dict = {
 
   // App-level commands
   "tui.command.session.list.title": "セッションを切り替え",
+  "tui.command.session.list.switching": "作業ディレクトリを切り替え中…",
   "tui.command.session.new.title": "新規セッション",
   "tui.command.session.recover.title": "中断したターンを再開",
   "tui.session.recovering": "復旧中",

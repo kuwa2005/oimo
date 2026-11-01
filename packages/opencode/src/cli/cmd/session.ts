@@ -1,3 +1,4 @@
+import path from "path"
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
@@ -131,7 +132,7 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      const sessions = [...Session.listGlobal({ roots: true, limit: args.maxCount ?? 100 })]
 
       if (sessions.length === 0) {
         if (process.stdout.isTTY) {
@@ -213,7 +214,7 @@ async function pickAndLaunch(sessions: Session.Info[], flags: string[]) {
   const options = [
     { label: "＋ New session", value: "new" },
     ...sessions.map((s) => ({
-      label: `${Locale.truncate(s.title, 60)}  ${Locale.todayTimeOrDateTime(s.time.updated)}`,
+      label: `${Locale.truncate(s.title, 60)}  ${path.basename(s.directory)}  ${Locale.todayTimeOrDateTime(s.time.updated)}`,
       value: s.id,
     })),
   ]
@@ -222,7 +223,15 @@ async function pickAndLaunch(sessions: Session.Info[], flags: string[]) {
     options,
   })
   if (prompts.isCancel(result)) return
-  await launchTui(result === "new" ? flags : ["--session", String(result), ...flags])
+  if (result === "new") {
+    await launchTui(flags)
+    return
+  }
+  const session = sessions.find((s) => s.id === result)
+  const cwd = path.resolve(process.cwd())
+  const project =
+    session && path.resolve(session.directory) !== cwd ? [session.directory] : []
+  await launchTui([...project, "--session", String(result), ...flags])
 }
 
 async function launchTui(args: string[]) {
@@ -237,14 +246,16 @@ function formatSessionTable(sessions: Session.Info[]): string {
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
   const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
+  const maxDirWidth = Math.max(12, ...sessions.map((s) => path.basename(s.directory).length))
 
-  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Dir${" ".repeat(maxDirWidth - 3)}  Updated`
   lines.push(header)
   lines.push("─".repeat(header.length))
   for (const session of sessions) {
     const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
+    const dir = path.basename(session.directory).padEnd(maxDirWidth)
     const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
-    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
+    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${dir}  ${timeStr}`
     lines.push(line)
   }
 

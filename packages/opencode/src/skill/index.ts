@@ -13,6 +13,7 @@ import { Permission } from "@/permission"
 import { AppFileSystem } from "@mimo-ai/shared/filesystem"
 import { Config } from "../config"
 import { ConfigMarkdown } from "../config"
+import { Instance } from "@/project/instance"
 import { Glob } from "@mimo-ai/shared/util/glob"
 import { Log } from "../util"
 import { Discovery } from "./discovery"
@@ -211,6 +212,14 @@ const discoverSkills = Effect.fnUntraced(function* (
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
   const bundledRoots: string[] = []
+
+  yield* Effect.tryPromise({
+    try: () =>
+      import("@/evolve/skill-staging").then((m) =>
+        m.mirrorEvolveSkillsToWorktree({ worktree, projectID: String(Instance.project.id) }),
+      ),
+    catch: () => undefined,
+  }).pipe(Effect.ignore)
 
   // Extract builtin skills to disk first (user skills with same name override)
   if (!Flag.MIMOCODE_DISABLE_BUILTIN_SKILLS) {

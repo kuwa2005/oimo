@@ -19,7 +19,7 @@
 
 Open Mimo Code 是一个终端原生的 AI 编程助手。它能读写代码、执行命令、管理 Git，通过持久化记忆系统，在多次会话间保持对你项目的深度理解，并**持续自我进化**。
 
-内置 OpenCode Zen 免费默认通道——零配置即可开始使用。也支持接入各家主流 LLM 厂商 API。
+内置 OpenCode Zen 免费默认通道：**无需 API 密钥**即可使用 Zen 上 active 免费模型（2026-11 时为 **8** 个，以 `big-pickle` 为先），并支持 **first-frame failover**。也可接入各主流 LLM 厂商 API。
 
 
 ---
@@ -47,7 +47,7 @@ oimo
 ```
 
 首次启动自动引导配置。支持：
-- **OpenCode Zen（Big Pickle）** — 免费默认通道，零配置
+- **OpenCode Zen（Auto Model 免费）** — 模型 ID `auto/free`（选择器：**Auto Model (免费)**）；Zen 免费池 + first-frame failover，零配置（见下文）
 - **小米 MiMo 平台** — OAuth 登录
 - **Codex（ChatGPT Pro/Plus）** — OpenAI OAuth 登录
 - **从 Claude Code 导入** — 一键迁移已有认证
@@ -141,6 +141,20 @@ oimo attach http://127.0.0.1:4096
 - **任务进展** (`tasks/<id>/progress.md`) — 逐任务日志
 
 记忆自动在会话恢复时注入上下文，agent 无需重新理解项目背景。
+
+### Auto Model（免费）
+
+- **公开 ID：** `auto/free`（模型选择器：**Auto Model (免费)**）
+- **Zen 免费池：** 以 [`models.dev`](https://models.dev/api.json) 为准的 OpenCode active 免费模型（2026-11 为 **8** 个，如 `big-pickle`、`mimo-v2.6-flash-free` 等；`mimo-v2.5-free` 等 deprecated ID 已排除）
+- **first-frame failover：** 在首个响应提交前，遇 429 / 5xx / 过载等自动切换下一免费模型（启动时 Big Pickle 探测）
+- **加成候选：** 配置 OpenRouter / NVIDIA NIM / Groq 等 API 密钥后通过 `/free-setup` 或 `auto_free.fallbacks` 加入
+- 详见 [`docs/auto-free-fcc-sync.md`](docs/auto-free-fcc-sync.md) · 优先顺序校验：`bun script/sync-zen-free-preferred-order.ts`
+
+### 恢复会话（跨项目）
+
+- **TUI：** `/sessions` 或 **Ctrl+X L** — 列出近 30 日、**所有项目**的根会话；行尾显示 **工作目录**；选中后必要时 **自动切换到该会话的 directory** 再打开
+- **CLI：** `oimo session list` — 表格或选择器；若会话在其他目录则 `oimo <path> --session <id>` 启动 TUI
+- **同目录：** `oimo --continue` / `-c`，或 `--warm` 继承摘要的新会话
 
 ### 智能上下文管理
 
@@ -372,6 +386,8 @@ export PULSE_SERVER=tcp:127.0.0.1:4713
 
 **这就是 “Where Models and Agents Co-Evolve” 的落地形态。**
 
+产品本体改进 backlog（一项一 issue）：GitHub [`自己進化` 标签](https://github.com/kuwa2005/oimo/issues?q=label%3A%E8%87%AA%E5%B7%B1%E9%80%B2%E5%8C%96)。正式范围见 [`docs/evolve/completion-evidence.md`](docs/evolve/completion-evidence.md)。
+
 ---
 
 ## 配置
@@ -544,7 +560,7 @@ bun turbo typecheck      # 类型检查
 
 ## 与 OpenCode 的关系
 
-Open Mimo Code 基于 [OpenCode](https://github.com/anomalyco/opencode) fork 构建，保留其全部核心能力（多 Provider、TUI、LSP、MCP、插件），并在此基础上构建了持久化记忆、智能上下文管理、子智能体编排、目标驱动的自主循环、Compose 工作流，以及通过 dream/distill 实现的自我进化。
+Open Mimo Code 在 [kuwa2005/oimo](https://github.com/kuwa2005/oimo) 持续开发，基于 [OpenCode](https://github.com/anomalyco/opencode)，并 selective 合入上游 [MiMo-Code](https://github.com/XiaomiMiMo/MiMo-Code)。在 OpenCode 核心之上增加持久记忆、Auto Model（免费）、跨项目会话恢复、自我进化（`/evolve`）、SE/FDE 自律、Compose、多仓库 workspace 等。
 
 ---
 

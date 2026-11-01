@@ -2,8 +2,8 @@
 
 Open Mimo Code（CLI: `oimo`）が、一般的なコーディングエージェント・Codex・Claude Code・Cursor・OpenCode と比べて**何を得意とする製品か**を整理したドキュメントです。
 
-> **前提:** oimo は [OpenCode](https://github.com/anomalyco/opencode) フォークです。TUI・LSP・MCP・プラグイン・多プロバイダー接続など OpenCode 系の基盤は共有します。本稿は **oimo 固有の追加価値** に焦点を当てます。  
-> 競合製品の機能は日々変わるため、表は「2026-09 時点の oimo 実装」基準です（マルチリポ / Continuous Self-Evolution / **FDE·SE 自律実行** は formal COMPLETE）。各製品の最新仕様は公式ドキュメントを参照してください。
+> **前提:** oimo は [OpenCode](https://github.com/anomalyco/opencode) フォークです（継続開発: [kuwa2005/oimo](https://github.com/kuwa2005/oimo)）。TUI・LSP・MCP・プラグイン・多プロバイダー接続など OpenCode 系の基盤は共有します。本稿は **oimo 固有の追加価値** に焦点を当てます。  
+> 競合製品の機能は日々変わるため、表は **2026-11 時点の oimo 実装** 基準です（マルチリポ / Continuous Self-Evolution / **FDE·SE 自律実行** / **Zen 無料 8 モデル** / **全プロジェクトセッション再開** は formal COMPLETE または README 記載どおり）。各製品の最新仕様は公式ドキュメントを参照してください。
 
 ---
 
@@ -43,6 +43,7 @@ Open Mimo Code（CLI: `oimo`）が、一般的なコーディングエージェ�
 | **Evidence Manifest + TestAttempt 証跡** | ● | — | — | — | — | — |
 | **safe_auto 権限**（allow-all ではない既定） | ● | — | — | — | — | — |
 | **Auto Model (無料) + first-frame failover** | ● | — | — | — | — | — |
+| **全プロジェクトセッション一覧 + directory 切替再開** | ● | ◐ | — | — | — | — |
 | **マルチリポ System Workspace**（Change set / Policy） | ● | — | — | — | — | — |
 | **`--warm` ソフト continue** | ● | — | — | — | — | — |
 | **同梱ビルトインスキル**（PDF/DOCX/research 等） | ● | ◐ | — | — | — | — |
@@ -97,7 +98,8 @@ OpenCode は oimo の土台です。以下は **oimo が追加した製品能力
 | 自律 | `/goal` + **AutonomyRun 状態機械**、SE/FDE/`/auto`、Lock Gate、Evidence Manifest、TestAttempt、safe_auto |
 | ワークフロー | Compose、`/compose-next`、`.oimo/workflows/` |
 | 自己進化 | evolve / friction / dream / distill、backlog・briefs（formal COMPLETE） |
-| ルーティング | **Auto Model (無料)** — Zen active 7 モデル + first-frame failover（[auto-free-fcc-sync.md](./auto-free-fcc-sync.md)） |
+| ルーティング | **Auto Model (無料)** — Zen active **8** モデル + first-frame failover（[auto-free-fcc-sync.md](./auto-free-fcc-sync.md)） |
+| セッション | **`/sessions`** / **`oimo session list`** — 全 project の過去セッション、**作業 directory へ切替**して再開 |
 | 現場 | マルチリポ Workspace / Change set / Policy（[multi-repo/README.md](./multi-repo/README.md)）、`--fde` / `--se` / `--spauto`、`--warm` |
 | 製品 | `oimo.jsonc` + JSON Schema、MiMo OAuth・音声、Claude/Codex インポート UX、`--help` 軽量パス |
 
@@ -140,7 +142,7 @@ Claude Code は Anthropic 公式のターミナルエージェントです。oim
 ### oimo が強い領域
 
 - **プロバイダ非依存** — Claude に加え OpenRouter / Codex / Zen / MiMo 等を同一 TUI で切替
-- **Auto Model (無料)** — Claude 契約なしでも Zen 無料 7 モデルを router 可能
+- **Auto Model (無料)** — Claude 契約なしでも Zen 無料 **8** モデルを router 可能（`mimo-v2.6-flash-free` 等。`mimo-v2.5-free` は deprecated）
 - **持続メモリ + チェックポイント** — oimo 形式の `MEMORY.md` / checkpoint / tasks 一体
 - **Self Evolution** — `/evolve`、friction ルール、AI-to-AI briefs（Claude Code 単体にはない製品ループ）
 - **マルチリポ・Compose・SE/FDE ゴール駆動** — 大規模・長期・現場案件向けの本隊機能
@@ -187,14 +189,22 @@ Codex（ChatGPT Pro/Plus 連携の OpenAI コーディング CLI）も **OAuth �
 - README の *Where Models and Agents Co-Evolve* はこのループを指す
 - formal scope は COMPLETE（[evolve/completion-evidence.md](./evolve/completion-evidence.md)）
 
-関連: ビルトイン `evolve` スキル、`/dream`、`/distill`
+関連: ビルトイン `evolve` スキル、`/dream`、`/distill`  
+製品本体 backlog: GitHub [label:自己進化](https://github.com/kuwa2005/oimo/issues?q=label%3A%E8%87%AA%E5%B7%B1%E9%80%B2%E5%8C%96)（1 要素 1 issue）
 
 ### 6.2 Auto Model (無料)
 
 - 公開 ID: `auto/free`（TUI: **Auto Model (無料)**）
-- OpenCode Zen の **active 無料 7 モデル** を zero-config で候補化
+- OpenCode Zen の **active 無料 8 モデル**（2026-11、`models.dev` 準拠）を zero-config で候補化
+- 優先順: `packages/opencode/src/provider/zen-free-preferred-order.json`（`bun script/sync-zen-free-preferred-order.ts`）
 - **first-frame failover** — 429 / 5xx / upstream 過負荷等、コミット前なら次モデルへ（[auto-free-fcc-sync.md](./auto-free-fcc-sync.md)）
 - FCC 由来 OpenRouter / NVIDIA / Groq は API キー設定時にボーナス候補
+
+### 6.2b セッション再開（全プロジェクト）
+
+- TUI: `/sessions` · Ctrl+X L — `experimental.session.list` ベースの一覧、フッターに directory
+- 選択時: `switchDirectory` + bootstrap → 当該セッションへ navigate
+- CLI: `oimo session list` → `oimo <session.directory> --session <id>`
 
 将来: `auto/paid` / `auto/hybrid`（[auto-mode-roadmap.md](./auto-mode-roadmap.md)）
 

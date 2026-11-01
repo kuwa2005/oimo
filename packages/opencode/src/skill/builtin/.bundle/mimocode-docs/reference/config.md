@@ -132,6 +132,16 @@ The trigger is the model's prompt capacity (`limit.input` when the provider publ
 | `memory.cc_index` | Index Claude Code memory under scope `cc` (default false; see privacy note in schema) |
 | `history` | Conversation-history FTS index config |
 
+### Auto Model (free)
+
+Model ID `auto/free` (TUI: **Auto Model (free)**). Uses OpenCode Zen active free models (`cost.input === 0`, non-deprecated) with **first-frame failover** before the first committed response. Zen pool order: `zen-free-preferred-order.json` (sync check: `bun script/sync-zen-free-preferred-order.ts`). See repo `docs/auto-free-fcc-sync.md`.
+
+| Key | Purpose |
+|-----|---------|
+| `auto_free.fallbacks` | Optional ordered `provider/model` list prepended before the Zen pool (FCC-synced catalog is the default seed) |
+
+Bonus free providers (OpenRouter `:free`, Groq, NVIDIA NIM) require API keys — use `/free-setup` or set keys in auth.
+
 ### Autonomous / self-improvement
 | Key | Purpose |
 |-----|---------|
@@ -165,6 +175,8 @@ The trigger is the model's prompt capacity (`limit.input` when the provider publ
 | `autonomy.max_duration_ms` | Wall-clock budget per task in ms (default 7_200_000) |
 | `autonomy.max_cost_usd` | Soft cost ceiling per task in USD (default 10) |
 | `autonomy.judge_max_retries` | Judge retries before `judge_failed` stop (default 2) |
+| `session_bounds.max_autonomous_turns` | Pause main loop after N assistant turns since last real user message (unset = no limit) |
+| `session_bounds.max_autonomous_tool_calls` | Pause after N tool calls since last real user message (unset = no limit) |
 | `experimental.auto_continue` | **Deprecated** — alias for `autonomy.enabled` (does not auto-submit predicted prompts) |
 
 #### Modes (CLI / `/auto`)

@@ -56,21 +56,24 @@ FCC_ROOT=/home/ubuntu/workspace/free-claude-code bun script/sync-auto-free-catal
 
 キーやログインなしでも、OpenCode Zen の無料プール（`apiKey: "public"`）上の **active な無料モデル**（`cost.input === 0` かつ `status !== deprecated`）が Auto(無料) の候補になる。設定不要で first-frame フォールバックが効く。
 
-[`models.dev`](https://models.dev/api.json) の `opencode.models` を正とする。2026-09 時点の active 無料 7 件（試行優先順は [`ZEN_FREE_PREFERRED_ORDER`](../packages/opencode/src/provider/auto-free/resolve.ts)）:
+[`models.dev`](https://models.dev/api.json) の `opencode.models` を正とする。2026-11 時点の active 無料 8 件（試行優先順は [`zen-free-preferred-order.json`](../packages/opencode/src/provider/zen-free-preferred-order.json) → [`ZEN_FREE_PREFERRED_ORDER`](../packages/opencode/src/provider/auto-free/resolve.ts)）:
 
-| 試行順 | model id | 表示名 |
-|--------|----------|--------|
-| 1 | `big-pickle` | Big Pickle |
-| 2 | `nemotron-3-ultra-free` | Nemotron 3 Ultra |
-| 3 | `nemotron-3.5-lightning-free` | Nemotron 3.5 Lightning |
-| 4 | `mimo-v2.5-free` | MiMo V2.5 |
-| 5 | `muse-spark-1.3-contributor-free` | Muse Spark 1.3 |
-| 6 | `muse-spark-1.2-contributor-free` | Muse Spark 1.2 |
-| 7 | `ling-3.0-flash-fin-free` | Ling 3.0 Flash Fin |
+| 試行順 | model id | メモ |
+|--------|----------|------|
+| 1 | `big-pickle` | FCC 先頭・起動時プローブ |
+| 2 | `mimo-v2.6-flash-free` | Zen 無料 MiMo（v2.5-free は deprecated） |
+| 3 | `deepseek-v4.1-flash-free` | |
+| 4 | `nemotron-3.5-lightning-free` | |
+| 5 | `nemotron-3.5-super-vl-free` | |
+| 6 | `glm-5.3-flash-free` | |
+| 7 | `flint-40b-free` | |
+| 8 | `beam-free` | |
 
-`big-pickle` は起動時プローブとカタログ prior で先頭を維持。他 6 件は Zen プールから自動追加され、上記順で failover する。
+検証: `bun script/sync-zen-free-preferred-order.ts`（`--write` で models.dev に新規 active が出たとき末尾追記）。
 
-**MiMo について:** Xiaomi 直 API や旧 `mimo-v2-flash-free` 等の無料キャンペーン終了と、OpenCode Zen の `mimo-v2.5-free` は別枠。Zen 上では `cost.input: 0` / `active` のまま（Windows 版 OpenCode で無料応答があるのはこのプール）。`mimo-v2-flash-free` 等は models.dev 上 `deprecated`。
+`big-pickle` は起動時プローブとカタログ prior で先頭を維持。他 7 件は Zen プールから自動追加され、上記順で failover する。
+
+**MiMo について:** Xiaomi 直 API（`api.xiaomimimo.com` free-ai）や旧 `mimo-auto` / `mimo-free` は別枠（多く終了・403）。**ゼロ設定の無料 MiMo は Zen の `mimo-v2.6-flash-free`**。`mimo-v2.5-free` / `mimo-v2-flash-free` 等は models.dev 上 `deprecated`。
 
 FCC 由来の OpenRouter / NVIDIA / Groq などは、利用者がキーを入れたときだけ候補に乗る（ボーナス）。
 

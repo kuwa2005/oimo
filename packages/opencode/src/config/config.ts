@@ -32,6 +32,7 @@ import * as ConfigAutonomy from "./autonomy"
 import { permissionConfigForPreset } from "../autonomy/safe-auto"
 import * as ConfigCompliance from "./compliance"
 import * as ConfigReliability from "./reliability"
+import * as ConfigSessionBounds from "./session-bounds"
 import { ConfigFormatter } from "./formatter"
 import { MIMOCODE_GITIGNORE_ENTRIES } from "./gitignore"
 import { ConfigHistory } from "./history"
@@ -128,6 +129,10 @@ const InfoSchema = Schema.Struct({
   reliability: Schema.optional(ConfigReliability.Info).annotate({
     description:
       "Reliability harness: evidence freshness before goal stop, existence/claim checks on bash, loop convergence, and edit-scope boundaries. On by default; set enabled:false or MIMOCODE_DISABLE_RELIABILITY=1 to opt out.",
+  }),
+  session_bounds: Schema.optional(ConfigSessionBounds.Info).annotate({
+    description:
+      "Pause the main agent loop after too many autonomous turns or tool calls since the last real user message (human-in-the-loop checkpoint).",
   }),
   watcher: Schema.optional(
     Schema.Struct({

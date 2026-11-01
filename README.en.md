@@ -19,7 +19,7 @@
 
 Open Mimo Code is a terminal-native AI coding assistant. It can read and write code, run commands, manage Git, and use a persistent memory system to keep a deep understanding of your project across sessions while **continuously evolving itself**.
 
-OpenCode Zen is built in as a free default channel, so you can start with zero configuration. Open Mimo Code also supports connecting to any mainstream LLM provider API.
+OpenCode Zen is built in as a free default channel: **no API key** for the active free pool on Zen (**8 models** as of 2026-11, led by `big-pickle`) with **first-frame failover**. You can also connect mainstream LLM provider APIs.
 
 
 ---
@@ -47,7 +47,7 @@ oimo
 ```
 
 The first launch guides you through configuration automatically. Supported options:
-- **OpenCode Zen (Big Pickle)** — free default channel, zero configuration
+- **OpenCode Zen (Auto Model free)** — `auto/free` in the model picker; Zen free pool + first-frame failover, zero config (see below)
 - **Xiaomi MiMo Platform** — OAuth login
 - **Codex (ChatGPT Pro/Plus)** — OpenAI OAuth login
 - **Import from Claude Code** — migrate existing authentication in one step
@@ -144,6 +144,20 @@ Cross-session memory powered by SQLite FTS5 full-text search:
 - **Task progress** (`tasks/<id>/progress.md`) — per-task logs
 
 Memory is injected automatically when a session resumes, so the agent does not need to relearn project context.
+
+### Auto Model (free)
+
+- **Public ID:** `auto/free` (picker label: **Auto Model (free)**)
+- **Zen free pool:** active free models on OpenCode Zen per [`models.dev`](https://models.dev/api.json) (**8** as of 2026-11, e.g. `big-pickle`, `mimo-v2.6-flash-free`, `deepseek-v4.1-flash-free`; deprecated IDs such as `mimo-v2.5-free` are excluded)
+- **First-frame failover:** before the first committed response, auto-advance on 429 / 5xx / overload (startup Big Pickle probe)
+- **Bonus candidates:** OpenRouter / NVIDIA NIM / Groq via `/free-setup` or `auto_free.fallbacks` when you add API keys
+- Details: [`docs/auto-free-fcc-sync.md`](docs/auto-free-fcc-sync.md) · validate order: `bun script/sync-zen-free-preferred-order.ts`
+
+### Resume sessions (all projects)
+
+- **TUI:** `/sessions` or **Ctrl+X L** — root sessions across projects (last 30 days). Footer shows the **working directory**. Selecting a row **switches directory** when needed, then opens the session
+- **CLI:** `oimo session list` — table or picker; launches `oimo <path> --session <id>` when the session lives elsewhere
+- **Same directory:** `oimo --continue` / `-c`, or `--warm` for a new session with inherited summary
 
 ### Intelligent Context Management
 
@@ -381,6 +395,8 @@ Self-evolution logs live under **`~/.oimo/evolve/<projectID>/`** (not in the pro
 
 **This is what “Where Models and Agents Co-Evolve” means in practice.**
 
+Product improvement backlog (one element per issue): GitHub issues labeled [`自己進化`](https://github.com/kuwa2005/oimo/issues?q=label%3A%E8%87%AA%E5%B7%B1%E9%80%B2%E5%8C%96) (e.g. #56 memory double-read, #57 autonomy bounds …). Formal scope: [`docs/evolve/completion-evidence.md`](docs/evolve/completion-evidence.md).
+
 ---
 
 ## Configuration
@@ -563,7 +579,7 @@ bun turbo typecheck      # Type check
 
 ## Relationship to OpenCode
 
-Open Mimo Code is built as a fork of [OpenCode](https://github.com/anomalyco/opencode). It keeps all core OpenCode capabilities (multiple providers, TUI, LSP, MCP, plugins) and adds persistent memory, intelligent context management, subagent orchestration, goal-driven autonomous loops, compose workflows, and self-improvement via dream/distill.
+Open Mimo Code is continued development at [kuwa2005/oimo](https://github.com/kuwa2005/oimo), based on [OpenCode](https://github.com/anomalyco/opencode), with selective ports from upstream [MiMo-Code](https://github.com/XiaomiMiMo/MiMo-Code). Beyond OpenCode’s core (multi-provider, TUI, LSP, MCP, plugins), oimo adds persistent memory, Auto Model (free), cross-project session resume, self-evolution (`/evolve`), SE/FDE autonomy, Compose, multi-repo workspaces, and more.
 
 ---
 
