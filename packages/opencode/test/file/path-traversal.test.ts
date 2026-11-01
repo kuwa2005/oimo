@@ -35,6 +35,15 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  // Windows cross-drive: path.relative returns the absolute `to` path, not "..".
+  // The old `!relative().startsWith("..")` treated that as inside (fail open).
+  // On POSIX these pairs already yield ".." from host relative(); the assertion
+  // still documents the contract and locks the predicate if anyone runs win32.
+  test("blocks cross-drive and cross-share paths", () => {
+    expect(Filesystem.contains("C:\\mimocode\\config", "D:\\plugins\\evil")).toBe(false)
+    expect(Filesystem.contains("\\\\server\\share\\root", "\\\\other\\share\\file")).toBe(false)
+  })
 })
 
 /*
