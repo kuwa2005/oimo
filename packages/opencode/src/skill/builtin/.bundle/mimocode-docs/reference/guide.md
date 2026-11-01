@@ -120,7 +120,7 @@ Config-file alternative: instead of a `.md` file you can inline an agent under t
 
 All TUI keybinds are remappable under the `keybinds` config. The leader key defaults to `ctrl+x`, so `<leader>` in a binding means "press ctrl+x then …".
 
-Common defaults: `Tab` cycle agents · `<leader>n` new session · `<leader>l` list sessions · `<leader>e` open external editor · `<leader>t` themes · `<leader>b` toggle sidebar · `ctrl+r` rename session. Set a binding to `"none"` to disable it.
+Common defaults: `Tab` cycle agents · `<leader>n` new session · `<leader>l` or `/sessions` list sessions (all projects; switches directory on resume) · `<leader>e` open external editor · `<leader>t` themes · `<leader>b` toggle sidebar · `ctrl+r` rename session. Set a binding to `"none"` to disable it.
 
 ```jsonc
 { "keybinds": { "session_new": "<leader>c", "sidebar_toggle": "none" } }

@@ -3,7 +3,8 @@ import { isRecord } from "./record"
 
 /** Collapse PascalCase, camelCase, snake_case, and kebab-case to one comparable token. */
 export function canonical(name: string): string {
-  return name.replace(/[-_\s]+/g, "").toLowerCase()
+  const mcp = /^mcp__(.+?)__(.+)$/.exec(name)
+  return (mcp ? mcp[1] + "_" + mcp[2] : name).replace(/[-_\s]+/g, "").toLowerCase()
 }
 
 /** Resolve a model-provided identifier to a registered name when casing or separators differ. */

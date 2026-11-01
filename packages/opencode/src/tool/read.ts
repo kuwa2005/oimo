@@ -13,6 +13,7 @@ import { SessionCwd } from "./session-cwd"
 import { Instruction } from "../session/instruction"
 import { Provider } from "@/provider"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { evaluateReadPolicy } from "./read-policy"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -206,6 +207,25 @@ export const ReadTool = Tool.define(
         kind: stat?.type === "Directory" ? "directory" : "file",
         repositoryId: params.repositoryId,
       })
+
+      const policySkip = evaluateReadPolicy({
+        filepath,
+        sessionID: ctx.sessionID,
+        projectID: String(Instance.project.id),
+        offset: params.offset,
+        limit: params.limit,
+      })
+      if (policySkip) {
+        return {
+          title: policySkip.title,
+          output: policySkip.output,
+          metadata: {
+            preview: policySkip.output.slice(0, 200),
+            truncated: false,
+            loaded: [] as string[],
+          },
+        }
+      }
 
       yield* ctx.ask({
         permission: "read",

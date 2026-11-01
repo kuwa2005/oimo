@@ -110,7 +110,7 @@ export const dict: Record<string, string> = {
   "tui.tips.new_session":
     "Press {highlight}Ctrl+X N{/highlight} or {highlight}/new{/highlight} to start a fresh conversation session",
   "tui.tips.sessions":
-    "Use {highlight}/sessions{/highlight} or {highlight}Ctrl+X L{/highlight} to list and continue previous conversations",
+    "Use {highlight}/sessions{/highlight} or {highlight}Ctrl+X L{/highlight} to list past sessions across projects, switch to their directory, and resume",
   "tui.tips.compact": "Run {highlight}/compact{/highlight} to summarize long sessions near context limits",
   "tui.tips.export":
     "Press {highlight}Ctrl+X X{/highlight} or {highlight}/export{/highlight} to save the conversation as Markdown",
@@ -297,6 +297,7 @@ export const dict: Record<string, string> = {
 
   // App-level commands
   "tui.command.session.list.title": "Switch session",
+  "tui.command.session.list.switching": "Switching project directory…",
   "tui.command.session.new.title": "New session",
   "tui.command.session.recover.title": "Continue interrupted turn",
   "tui.session.recovering": "recovering",

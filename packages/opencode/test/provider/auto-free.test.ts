@@ -101,13 +101,14 @@ describe("auto-free.resolve", () => {
 
   test("orders active OpenCode Zen free models by ZEN_FREE_PREFERRED_ORDER", () => {
     const active = [
-      "ling-3.0-flash-fin-free",
-      "muse-spark-1.2-contributor-free",
-      "mimo-v2.5-free",
+      "beam-free",
+      "mimo-v2.6-flash-free",
       "big-pickle",
       "nemotron-3.5-lightning-free",
-      "muse-spark-1.3-contributor-free",
-      "nemotron-3-ultra-free",
+      "flint-40b-free",
+      "deepseek-v4.1-flash-free",
+      "glm-5.3-flash-free",
+      "nemotron-3.5-super-vl-free",
     ]
     const providers = {
       opencode: {
@@ -117,12 +118,13 @@ describe("auto-free.resolve", () => {
     const resolved = resolveAutoFreeCandidates({ providers })
     expect(resolved.map((m) => String(m.id))).toEqual([
       "big-pickle",
-      "nemotron-3-ultra-free",
+      "mimo-v2.6-flash-free",
+      "deepseek-v4.1-flash-free",
       "nemotron-3.5-lightning-free",
-      "mimo-v2.5-free",
-      "muse-spark-1.3-contributor-free",
-      "muse-spark-1.2-contributor-free",
-      "ling-3.0-flash-fin-free",
+      "nemotron-3.5-super-vl-free",
+      "glm-5.3-flash-free",
+      "flint-40b-free",
+      "beam-free",
     ])
   })
 

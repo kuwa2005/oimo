@@ -33,6 +33,7 @@ import { computeLastMessageInfo } from "./last-message-info"
 import { contextPressureLevel, usable, isOverflow as overflowCheck } from "./overflow"
 import { Config } from "@/config"
 import * as ConfigAutonomy from "@/config/autonomy"
+import * as ConfigSessionBounds from "@/config/session-bounds"
 import * as ConfigCompliance from "@/config/compliance"
 import { redactUserParts } from "@/security/secret-redact"
 import * as ConfigReliability from "@/config/reliability"
@@ -140,6 +141,7 @@ import {
   AUTO_EVOLVE_TITLE,
 } from "./auto-evolve"
 import { skillSearchReminderForSession } from "./skill-search-reminder"
+import { exceeded, PAUSE_MARKER, pauseReminderText, statsSinceUserMessage } from "./autonomous-bounds"
 import {
   createMcpToolSearchCatalog,
   mcpToolCatalogBudget,
@@ -3919,6 +3921,53 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               if (yield* goalGate(lastUser)) continue
               yield* slog.info("exiting loop", { classification: classification.type })
               break
+            }
+          }
+
+          if (!agentID || agentID === "main") {
+            const cfgBounds = yield* config.get()
+            if (ConfigSessionBounds.enabled(cfgBounds)) {
+              const anchorMsg = msgs.findLast(
+                (m) =>
+                  m.info.role === "user" && m.parts.some((p) => p.type === "text" && !p.synthetic),
+              )
+              const anchorUser = anchorMsg?.info.role === "user" ? anchorMsg.info : undefined
+              if (anchorUser) {
+                const stats = statsSinceUserMessage(msgs, anchorUser.id)
+                const hit = exceeded({ cfg: cfgBounds, stats })
+                if (hit.exceeded) {
+                  const pausedAlready = msgs.some(
+                    (m) =>
+                      m.info.role === "user" &&
+                      m.info.id > anchorUser.id &&
+                      m.parts.some((p) => p.type === "text" && p.synthetic && p.text?.includes(PAUSE_MARKER)),
+                  )
+                  if (!pausedAlready) {
+                    const pauseMsg = yield* sessions.updateMessage({
+                      id: MessageID.ascending(),
+                      role: "user" as const,
+                      sessionID,
+                      agentID: anchorUser.agentID,
+                      agent: anchorUser.agent,
+                      model: anchorUser.model,
+                      tools: anchorUser.tools,
+                      format: anchorUser.format,
+                      time: { created: Date.now() },
+                    })
+                    yield* sessions.updatePart({
+                      id: PartID.ascending(),
+                      messageID: pauseMsg.id,
+                      sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: pauseReminderText(hit.reason),
+                    })
+                  }
+                  yield* status.set(sessionID, { type: "idle" })
+                  yield* slog.info("exiting loop", { reason: "autonomous_bounds", detail: hit.reason })
+                  break
+                }
+              }
             }
           }
 

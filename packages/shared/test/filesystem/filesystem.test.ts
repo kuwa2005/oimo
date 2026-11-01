@@ -329,10 +329,19 @@ describe("AppFileSystem", () => {
       expect(AppFileSystem.contains("/a/b", "/a/c")).toBe(false)
     })
 
+    // Cross-drive containment is a Windows contract (path.relative returns the
+    // absolute `to`); on POSIX the host relative() already yields "..". Lock the
+    // predicate here so a future regress to `!rel.startsWith("..")` stays visible
+    // from any host when someone exercises win32-style pairs via contains.
+    test("contains treats an absolute relative() result as outside", () => {
+      expect(AppFileSystem.contains("C:\\a", "D:\\b")).toBe(false)
+    })
+
     test("overlaps detects overlapping paths", () => {
       expect(AppFileSystem.overlaps("/a/b", "/a/b/c")).toBe(true)
       expect(AppFileSystem.overlaps("/a/b/c", "/a/b")).toBe(true)
       expect(AppFileSystem.overlaps("/a", "/b")).toBe(false)
+      expect(AppFileSystem.overlaps("C:\\a", "D:\\b")).toBe(false)
     })
   })
 })

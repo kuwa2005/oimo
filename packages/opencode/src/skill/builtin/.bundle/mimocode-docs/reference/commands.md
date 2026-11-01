@@ -19,7 +19,7 @@ Invoked from the shell. `oimo` with no command opens the TUI.
 | `oimo llm-server issue`/`list`/`revoke` | Mint and manage tokens that let a task reach this instance's models over `/v1`; it starts nothing — see @capability-api.md |
 | `oimo stats` | Usage statistics |
 | `oimo export` / `oimo import` | Export / import sessions |
-| `oimo session` | Manage sessions |
+| `oimo session list` | List sessions (all projects in TUI picker path); pick to launch TUI with `--session` and project directory when needed |
 | `oimo github` / `oimo pr` | GitHub / pull-request integration |
 | `oimo generate` | Code generation entry |
 | `oimo plugin` (plug) | Manage plugins |
@@ -34,9 +34,9 @@ Notable TUI flags:
 
 | Flag | Purpose |
 |------|---------|
-| `--continue` / `-c` | Resume last session (does **not** re-apply `--se`/`--fde`/`--auto` by itself). Global most-recent root session — not scoped to cwd |
+| `--continue` / `-c` | Resume last session in **this directory** (does **not** re-apply `--se`/`--fde`/`--auto` by itself) |
 | `--warm` | Soft continue: **new** session with a brief from the latest root session in **this directory** (summary). `--warm=deep` also inherits parent context up to the last compaction/checkpoint boundary |
-| `--session` / `-s` | Open a specific session |
+| `--session` / `-s` | Open a specific session (use with `[project]` positional or run from that session's directory) |
 | `--model` / `-m` | Model override |
 | `--agent` | Agent override |
 | `--se` / `--autonomy` | SE autonomy (Requirements Lock, then non-stop). Enables Friction Learning (SE lens) |
@@ -63,7 +63,8 @@ Most client commands run only when the whole input is the command. `/btw <questi
 
 | Command | Aliases | Purpose / availability |
 |---------|---------|------------------------|
-| `/sessions` | `/resume`, `/continue` | List and continue previous sessions |
+| `/sessions` | `/resume`, `/continue` | List past sessions **across projects** (directory in footer); switch working directory if needed, then resume |
+| `/free-setup` | — | Guided setup for free-tier provider API keys (OpenRouter, Groq, NVIDIA NIM) for Auto Model (free) bonus candidates |
 | `/workflows` | — | Open the workflow list; shown when the workflow experiment is enabled |
 | `/new` | `/clear` | Start a new session |
 | `/models` | — | Switch models |

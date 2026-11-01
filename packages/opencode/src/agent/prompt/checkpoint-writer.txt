@@ -80,6 +80,9 @@ For §4 Task tree, pull from the task tool only:
 
 (Then proceed to Turn 2 final Edit pass.)
 
+Turn 2b - Self-validate BEFORE any Edit/Write (mandatory):
+  Run the Pre-Write Checklist below against your planned draft mentally. Do NOT call Read on CHECKPOINT_PATH after writing to "verify" — that wastes turns and triggers validator recovery. Fix omissions in your head, then apply Edits once.
+
 Turn 2 - Issue Edits in parallel (single message), then stop:
   For checkpoint.md:
     For each of §1..§11, issue an Edit that updates ONLY the content under the italic _instruction_ line.

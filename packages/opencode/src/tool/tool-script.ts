@@ -5,7 +5,7 @@ import path from "path"
 import { Effect } from "effect"
 import type { Tool as AiTool } from "ai"
 import { EffectBridge, InstanceState } from "@/effect"
-import { Log, Filesystem } from "@/util"
+import { Log, Filesystem, ToolCompat } from "@/util"
 import { Agent } from "@/agent/agent"
 import type { ModelID, ProviderID } from "../provider/schema"
 import { evalScript, type HostFn } from "../workflow/sandbox"
@@ -461,7 +461,8 @@ export const ToolScriptTool = Tool.define(
             const id = String(name)
             const alias = TOOL_SCRIPT_ALIASES[id as keyof typeof TOOL_SCRIPT_ALIASES]
             const def = byId.get(alias ?? id)
-            const mcpDef = def ? undefined : mcpById.get(id)
+            const mcpID = def ? undefined : ToolCompat.resolveName(id, [...mcpById.keys()])
+            const mcpDef = mcpID ? mcpById.get(mcpID) : undefined
             if (!def && !mcpDef) return Promise.reject(new Error(`unknown tool: ${id}`))
             calls++
             if (calls > maxToolCalls)

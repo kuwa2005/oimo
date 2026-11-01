@@ -1,5 +1,6 @@
 import type { Model } from "../provider"
 import { ProviderID, ModelID } from "../schema"
+import zenPreferred from "../zen-free-preferred-order.json"
 import { catalog, looksFreeTier, type AutoFreeCandidate } from "./catalog"
 
 export type AutoFreeResolveInput = {
@@ -11,19 +12,13 @@ export type AutoFreeResolveInput = {
 
 /**
  * Preferred try-order among OpenCode Zen free (cost.input === 0, status active) models.
- * Sync with models.dev `opencode.models` — deprecated free ids are omitted.
- * Unknown active free models sort alphabetically after these (rank 1000).
- * Zero-config users get the whole active set without API keys (Zen public pool).
+ * Sync with [`zen-free-preferred-order.json`](../zen-free-preferred-order.json)
+ * (`bun script/sync-zen-free-preferred-order.ts` validates against models.dev).
+ * Deprecated free ids are omitted at runtime. Unknown active free models sort
+ * alphabetically after these (rank 1000). Zero-config users get the whole active
+ * set without API keys (Zen public pool).
  */
-export const ZEN_FREE_PREFERRED_ORDER = [
-  "big-pickle",
-  "nemotron-3-ultra-free",
-  "nemotron-3.5-lightning-free",
-  "mimo-v2.5-free",
-  "muse-spark-1.3-contributor-free",
-  "muse-spark-1.2-contributor-free",
-  "ling-3.0-flash-fin-free",
-] as const
+export const ZEN_FREE_PREFERRED_ORDER = zenPreferred.order as readonly string[]
 
 function parseRef(ref: string) {
   const [providerID, ...rest] = ref.split("/")

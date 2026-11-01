@@ -16,9 +16,11 @@ import { DialogSessionRename } from "./dialog-session-rename"
 import { Keybind } from "@/util"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
+import { formatSessionDirectory, sameDirectory, switchDirectoryWithBootstrap } from "../util/switch-directory"
 import { DialogWorkspaceCreate, openWorkspaceSession, restoreWorkspaceSession } from "./dialog-workspace-create"
 import { Spinner } from "./spinner"
 import { errorMessage } from "@/util/error"
+import type { GlobalSession } from "@mimo-ai/sdk/v2"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
@@ -34,16 +36,51 @@ export function DialogSessionList() {
   const toast = useToast()
   const { t } = useLanguage()
   const [toDelete, setToDelete] = createSignal<string>()
+  const [switching, setSwitching] = createSignal(false)
   const [search, setSearch] = createDebouncedSignal("", 150)
 
-  const [searchResults, { refetch }] = createResource(search, async (query) => {
-    if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30, roots: true })
-    return result.data ?? []
+  const start = Date.now() - 30 * 24 * 60 * 60 * 1000
+
+  const [globalSessions, { refetch: refetchGlobal }] = createResource(search, async (query) => {
+    const result = await sdk.client.experimental.session
+      .list({
+        roots: true,
+        limit: 100,
+        start,
+        search: query || undefined,
+      })
+      .catch(() => undefined)
+    return result?.data
   })
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+
+  const listable = (x: { id: string; parentID?: string }) =>
+    classifySession(x, sync.data.actor?.[x.id]).renderable
+
+  const sessions = createMemo((): GlobalSession[] => {
+    const global = globalSessions()
+    const base =
+      global ??
+      sync.data.session.map((s) => ({
+        ...s,
+        project: null as GlobalSession["project"],
+      }))
+    const current = currentSessionID()
+    const localChildren = sync.data.session.filter(
+      (x) => current !== undefined && x.parentID === current && listable(x),
+    )
+    const seen = new Set(base.map((s) => s.id))
+    return [
+      ...base,
+      ...localChildren
+        .filter((c) => !seen.has(c.id))
+        .map((s) => ({
+          ...s,
+          project: null as GlobalSession["project"],
+        })),
+    ]
+  })
 
   function createWorkspace() {
     dialog.replace(() => (
@@ -84,7 +121,7 @@ export function DialogSessionList() {
           }
           await project.workspace.sync()
           await sync.session.refresh()
-          if (search()) await refetch()
+          if (search()) await refetchGlobal()
           if (info?.workspaceID === session.workspaceID) {
             route.navigate({ type: "home" })
           }
@@ -120,8 +157,22 @@ export function DialogSessionList() {
   // with `visible: true`), and the same lifetime delivers its `actor.registered`
   // event — so the rows this reads are present for exactly the population that
   // can leak. `undefined` means "no rows", which classifySession renders.
-  const listable = (x: { id: string; parentID?: string }) =>
-    classifySession(x, sync.data.actor?.[x.id]).renderable
+
+  async function resumeSession(sessionID: string) {
+    if (switching()) return
+    const session = sessions().find((item) => item.id === sessionID)
+    if (!session) return
+    const target = session.directory
+    const active = sdk.directory || sync.path.directory
+    if (!sameDirectory(active, target)) {
+      setSwitching(true)
+      const ok = await switchDirectoryWithBootstrap({ sdk, sync, toast, directory: target })
+      setSwitching(false)
+      if (!ok) return
+    }
+    route.navigate({ type: "session", sessionID })
+    dialog.clear()
+  }
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
@@ -182,7 +233,7 @@ export function DialogSessionList() {
             )
           }
         } else {
-          footer = Locale.time(x.time.updated)
+          footer = `${formatSessionDirectory(x.directory, x.project?.worktree)} · ${Locale.time(x.time.updated)}`
         }
 
         const date = new Date(x.time.updated)
@@ -216,7 +267,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={switching() ? t("tui.command.session.list.switching") : t("tui.command.session.list.title")}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -225,11 +276,7 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
-        route.navigate({
-          type: "session",
-          sessionID: option.value,
-        })
-        dialog.clear()
+        void resumeSession(option.value)
       }}
       keybind={[
         {
@@ -273,7 +320,7 @@ export function DialogSessionList() {
               if (status && status !== "connected") {
                 await sync.session.refresh()
               }
-              if (search()) await refetch()
+              if (search()) await refetchGlobal()
               setToDelete(undefined)
               return
             }

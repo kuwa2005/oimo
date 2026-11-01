@@ -38,6 +38,13 @@ describe("util.tool-compat", () => {
     test("returns undefined for unknown tools", () => {
       expect(resolveName("grep", tools)).toBeUndefined()
     })
+
+    test("resolves MCP-prefixed names to the registered catalog name", () => {
+      const mcpTools = ["feishu-mcp-pro_doc_read"] as const
+
+      expect(resolveName("mcp__feishu-mcp-pro__doc_read", mcpTools)).toBe("feishu-mcp-pro_doc_read")
+      expect(resolveName("mcp__feishu_mcp_pro__doc_read", mcpTools)).toBe("feishu-mcp-pro_doc_read")
+    })
   })
 
   describe("normalizeInput", () => {
