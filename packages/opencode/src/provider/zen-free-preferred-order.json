@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source": "https://models.dev/api.json",
-  "updated_at": "2026-11-01",
+  "updated_at": "2026-11-08",
   "note": "Active OpenCode Zen free models (cost.input === 0, status !== deprecated). big-pickle stays first for FCC + startup probe.",
   "order": [
     "big-pickle",
@@ -11,6 +11,9 @@
     "nemotron-3.5-super-vl-free",
     "glm-5.3-flash-free",
     "flint-40b-free",
-    "beam-free"
+    "beam-free",
+    "crouton-alpha-free",
+    "iceman-free",
+    "inkling-2-small-free"
   ]
 }

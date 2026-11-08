@@ -1,4 +1,4 @@
-import { isRetryableTransientError } from "@/session/retry"
+import { isFreeUsageLimitError, isRetryableTransientError } from "@/session/retry"
 
 function httpStatus(error: unknown): number | undefined {
   if (!(error instanceof Error)) return undefined
@@ -37,6 +37,8 @@ export function isAutoFreeCandidateUnavailableError(error: unknown): boolean {
 
 /** Pre-commit failures that should advance Auto (free) to the next upstream model. */
 export function isAutoFreeFailoverAdvanceError(error: unknown): boolean {
+  // Per-model Zen quota — try the next free candidate before surfacing Go upsell.
+  if (isFreeUsageLimitError(error)) return true
   if (isRetryableTransientError(error)) return true
   if (isAutoFreeCandidateUnavailableError(error)) return true
   return false

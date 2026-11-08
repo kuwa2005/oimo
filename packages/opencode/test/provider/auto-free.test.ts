@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { MessageV2 } from "../../src/session/message-v2"
 import {
   classifyFailoverFailure,
   isAutoFreeCandidateUnavailableError,
@@ -202,6 +203,18 @@ describe("auto-free.failover", () => {
       "Streaming response failed: [502] Upstream error from Nvidia: Service temporarily overloaded",
     )
     expect(isAutoFreeFailoverAdvanceError(overloaded)).toBe(true)
+
+    const freeQuota = new MessageV2.APIError({
+      message: "Free usage limit",
+      statusCode: 429,
+      isRetryable: false,
+      responseBody: '{"type":"error","error":{"type":"FreeUsageLimitError"}}',
+    }).toObject() as MessageV2.APIError
+    expect(isAutoFreeFailoverAdvanceError(freeQuota)).toBe(true)
+    expect(classifyFailoverFailure(freeQuota, false, true)).toEqual({
+      action: "advance",
+      reason: "retryable-pre-commit",
+    })
     expect(classifyFailoverFailure(overloaded, false, true)).toEqual({
       action: "advance",
       reason: "retryable-pre-commit",

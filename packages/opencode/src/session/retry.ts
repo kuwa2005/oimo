@@ -10,6 +10,21 @@ export type Err = ReturnType<NamedError["toObject"]>
 // literal error string kind of sucks, but it is the simplest for now.
 export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go https://opencode.ai/go"
 
+/** OpenCode Zen public-pool daily quota (HTTP 429 + FreeUsageLimitError). */
+export function isFreeUsageLimitError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const data = (error as { data?: { responseBody?: string; message?: string } }).data
+    if (typeof data?.responseBody === "string" && data.responseBody.includes("FreeUsageLimitError")) return true
+    if (typeof data?.message === "string" && data.message.includes("FreeUsageLimitError")) return true
+  }
+  if (error instanceof Error) {
+    if (error.message.includes("FreeUsageLimitError")) return true
+    const cause = (error as { cause?: unknown }).cause
+    if (cause && cause !== error && isFreeUsageLimitError(cause)) return true
+  }
+  return false
+}
+
 // Shared with the TUI: does this retry status message indicate a rate-limit /
 // queue ("too many requests" / HTTP 429) condition? retryable() normalizes
 // every 429 variant into a message containing one of these substrings.
@@ -182,7 +197,7 @@ export function retryable(error: Err) {
     // Go. This MUST be checked before the generic 429-retry branch below,
     // otherwise the 429 branch swallows it into "Too Many Requests" + a
     // day-long retry-after and the upsell prompt is never shown. See PR #1680.
-    if (error.data.responseBody?.includes("FreeUsageLimitError")) return GO_UPSELL_MESSAGE
+    if (isFreeUsageLimitError(error)) return GO_UPSELL_MESSAGE
     // Subscription (Go) usage exhaustion is also an HTTP 429 but is likewise
     // terminal — the plan's quota is spent, retrying just hangs the session.
     // Exclude it from the generic 429-retry path the same way.
@@ -277,6 +292,8 @@ export function policy(opts: {
   maxWaitMs?: number
   /** Cap each individual wait (non-auto models keep retrying under this ceiling). */
   capWaitMs?: number
+  /** When true, skip session.status upsell on FreeUsageLimit (Auto free tries next Zen model). */
+  suppressGoUpsell?: boolean
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
@@ -291,7 +308,7 @@ export function policy(opts: {
       if (message === GO_UPSELL_MESSAGE) {
         return Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis
-          yield* opts.set({ attempt: meta.attempt, message, next: now })
+          if (!opts.suppressGoUpsell) yield* opts.set({ attempt: meta.attempt, message, next: now })
           return yield* Cause.done(meta.attempt)
         })
       }

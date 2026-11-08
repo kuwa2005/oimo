@@ -56,7 +56,7 @@ FCC_ROOT=/home/ubuntu/workspace/free-claude-code bun script/sync-auto-free-catal
 
 キーやログインなしでも、OpenCode Zen の無料プール（`apiKey: "public"`）上の **active な無料モデル**（`cost.input === 0` かつ `status !== deprecated`）が Auto(無料) の候補になる。設定不要で first-frame フォールバックが効く。
 
-[`models.dev`](https://models.dev/api.json) の `opencode.models` を正とする。2026-11 時点の active 無料 8 件（試行優先順は [`zen-free-preferred-order.json`](../packages/opencode/src/provider/zen-free-preferred-order.json) → [`ZEN_FREE_PREFERRED_ORDER`](../packages/opencode/src/provider/auto-free/resolve.ts)）:
+[`models.dev`](https://models.dev/api.json) のトップレベル `opencode.models`（旧 `providers.opencode.models` も sync スクリプトが許容）を正とする。2026-11 時点の active 無料 **11 件**（試行優先順は [`zen-free-preferred-order.json`](../packages/opencode/src/provider/zen-free-preferred-order.json) → [`ZEN_FREE_PREFERRED_ORDER`](../packages/opencode/src/provider/auto-free/resolve.ts)）:
 
 | 試行順 | model id | メモ |
 |--------|----------|------|
@@ -68,8 +68,13 @@ FCC_ROOT=/home/ubuntu/workspace/free-claude-code bun script/sync-auto-free-catal
 | 6 | `glm-5.3-flash-free` | |
 | 7 | `flint-40b-free` | |
 | 8 | `beam-free` | |
+| 9 | `crouton-alpha-free` | 2026-11 models.dev 追加 |
+| 10 | `iceman-free` | |
+| 11 | `inkling-2-small-free` | |
 
-検証: `bun script/sync-zen-free-preferred-order.ts`（`--write` で models.dev に新規 active が出たとき末尾追記）。
+検証: `bun script/sync-zen-free-preferred-order.ts`（`--write` で models.dev から stale 削除 + 新規 active を末尾追記）。
+
+**Failover:** Zen の `FreeUsageLimitError`（429）は Auto(無料) では次の無料候補へ進み、全候補を使い切ったときだけ Go アップセルを表示する（単一モデルで即アップセルしない）。
 
 `big-pickle` は起動時プローブとカタログ prior で先頭を維持。他 7 件は Zen プールから自動追加され、上記順で failover する。
 

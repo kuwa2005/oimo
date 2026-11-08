@@ -862,7 +862,14 @@ export const layer: Layer.Layer<
           ctx.stepPartIds = []
         })
 
-        const drain = (model: Provider.Model, opts: { withSessionRetry: boolean; onCommit?: () => void; catchHalt: boolean; maxWaitMs?: number; capWaitMs?: number }) => {
+        const drain = (model: Provider.Model, opts: {
+          withSessionRetry: boolean
+          onCommit?: () => void
+          catchHalt: boolean
+          maxWaitMs?: number
+          capWaitMs?: number
+          suppressGoUpsell?: boolean
+        }) => {
           const body = Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
@@ -912,6 +919,7 @@ export const layer: Layer.Layer<
                     parse,
                     maxWaitMs: opts.maxWaitMs,
                     capWaitMs: opts.capWaitMs,
+                    suppressGoUpsell: opts.suppressGoUpsell,
                     set: (info) =>
                       isMain
                         ? status.set(ctx.sessionID, {
@@ -1006,6 +1014,7 @@ export const layer: Layer.Layer<
                 withSessionRetry: true,
                 catchHalt: false,
                 maxWaitMs: SessionRetry.RETRY_MODEL_SWITCH_MS,
+                suppressGoUpsell: true,
                 onCommit: () => {
                   committed = true
                 },
@@ -1054,6 +1063,14 @@ export const layer: Layer.Layer<
             }
 
             if (!succeeded && lastError !== undefined) {
+              if (isMain && SessionRetry.isFreeUsageLimitError(lastError)) {
+                yield* status.set(ctx.sessionID, {
+                  type: "retry",
+                  attempt: candidates.length,
+                  message: SessionRetry.GO_UPSELL_MESSAGE,
+                  next: Date.now(),
+                })
+              }
               const detail =
                 lastError instanceof Error
                   ? lastError.message
