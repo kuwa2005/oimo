@@ -3,6 +3,7 @@ import path from "node:path"
 import { tmpdir } from "../../fixture/fixture"
 import {
   appendSessionLog,
+  extractCompletionReport,
   flushSessionLogResult,
   formatSessionLogEntry,
   formatSessionLogQA,
@@ -213,5 +214,147 @@ describe("session-log summary mode", () => {
     } finally {
       delete process.env.MIMOCODE_LOG
     }
+  })
+})
+
+describe("session-log completion report", () => {
+  const report = [
+    "完成しました。",
+    "",
+    "## 成果物",
+    "",
+    "- `自己進化202611108.md`",
+    "",
+    "### 構成",
+    "",
+    "8章",
+    "",
+    "### 主要な結論",
+    "",
+    "1. 実行層は強い",
+    "",
+    "## お知らせ",
+    "",
+    "無関係",
+    "",
+    "## 検証",
+    "",
+    "10/10 PASS",
+  ].join("\n")
+
+  test("T1 detects a report with deliverables and verification", () => {
+    expect(extractCompletionReport(report)).toBeDefined()
+  })
+
+  test("T2 rejects deliverables without verification", () => {
+    expect(extractCompletionReport(["# 成果物", "", "x"].join("\n"))).toBeUndefined()
+  })
+
+  test("T3 rejects verification without deliverables", () => {
+    expect(extractCompletionReport(["# 検証", "", "x"].join("\n"))).toBeUndefined()
+  })
+
+  test("T4 keeps target sections in order and drops unrelated ones", () => {
+    const out = extractCompletionReport(report)!
+    expect(out).not.toContain("完成しました")
+    expect(out).not.toContain("お知らせ")
+    expect(out.indexOf("## 成果物")).toBeLessThan(out.indexOf("### 構成"))
+    expect(out.indexOf("### 構成")).toBeLessThan(out.indexOf("### 主要な結論"))
+    expect(out.indexOf("### 主要な結論")).toBeLessThan(out.indexOf("## 検証"))
+    expect(out).toContain("10/10 PASS")
+  })
+
+  test("T5 includes nested headings once", () => {
+    const out = extractCompletionReport(report)!
+    expect(out.match(/^### 構成$/gm)).toHaveLength(1)
+    expect(out.match(/^### 主要な結論$/gm)).toHaveLength(1)
+  })
+
+  test("T6 ignores headings inside fenced code blocks", () => {
+    expect(extractCompletionReport(["```", "# 成果物", "```", "", "## 検証", ""].join("\n"))).toBeUndefined()
+  })
+
+  test("T7 matches decorated headings", () => {
+    const out = extractCompletionReport(["## **成果物**（変更点）", "", "x", "", "## 検証結果", "", "y"].join("\n"))
+    expect(out).toContain("成果物")
+    expect(out).toContain("検証結果")
+  })
+
+  test("T8 summary flush logs the extracted report only", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "log.md")
+    process.env.MIMOCODE_LOG = file
+    process.env.MIMOCODE_LOG_MODE = "summary"
+    try {
+      await recordSessionLogAssistant(report, 1000)
+      await flushSessionLogResult()
+    } finally {
+      delete process.env.MIMOCODE_LOG
+      delete process.env.MIMOCODE_LOG_MODE
+    }
+    const content = await Bun.file(file).text()
+    expect(content).toContain("### Result")
+    expect(content).not.toContain("完成しました")
+    expect(content).toContain("## 成果物")
+    expect(content).toContain("## 検証")
+    expect(content).toContain("### Result\n\n## 成果物")
+  })
+
+  test("T9 summary flush keeps the full text for ordinary messages", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "log.md")
+    process.env.MIMOCODE_LOG = file
+    process.env.MIMOCODE_LOG_MODE = "summary"
+    try {
+      await recordSessionLogAssistant("just an answer", 1000)
+      await flushSessionLogResult()
+    } finally {
+      delete process.env.MIMOCODE_LOG
+      delete process.env.MIMOCODE_LOG_MODE
+    }
+    const content = await Bun.file(file).text()
+    expect(content).toContain("### Result\n\njust an answer")
+  })
+
+  test("T10 full mode writes nothing", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "log.md")
+    process.env.MIMOCODE_LOG = file
+    process.env.MIMOCODE_LOG_MODE = "full"
+    try {
+      await recordSessionLogAssistant(report, 1000)
+      await flushSessionLogResult()
+    } finally {
+      delete process.env.MIMOCODE_LOG
+      delete process.env.MIMOCODE_LOG_MODE
+    }
+    expect(await Bun.file(file).exists()).toBe(false)
+  })
+
+  test("T11 no log target writes nothing", async () => {
+    delete process.env.MIMOCODE_LOG
+    delete process.env.MIMOCODE_LOG_AUTO
+    process.env.MIMOCODE_LOG_MODE = "summary"
+    try {
+      await recordSessionLogAssistant(report, 1000)
+      await flushSessionLogResult()
+    } finally {
+      delete process.env.MIMOCODE_LOG_MODE
+    }
+  })
+
+  test("T12 whitespace-only input writes nothing", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "log.md")
+    process.env.MIMOCODE_LOG = file
+    process.env.MIMOCODE_LOG_MODE = "summary"
+    try {
+      await recordSessionLogAssistant("   \n  ", 1000)
+      await flushSessionLogResult()
+    } finally {
+      delete process.env.MIMOCODE_LOG
+      delete process.env.MIMOCODE_LOG_MODE
+    }
+    expect(await Bun.file(file).exists()).toBe(false)
   })
 })

@@ -15,6 +15,65 @@ export function sessionLogMode(): SessionLogMode {
   return Flag.MIMOCODE_LOG_MODE === "full" ? "full" : "summary"
 }
 
+const REPORT_DELIVERABLE = ["成果物", "完成物", "納品物", "deliverables"]
+const REPORT_STRUCTURE = ["構成", "ファイル構成"]
+const REPORT_CONCLUSION = ["主要な結論", "結論", "まとめ", "サマリ", "summary"]
+const REPORT_VERIFICATION = ["検証", "テスト結果", "verification"]
+
+function normalizeHeading(text: string): string {
+  return text.replace(/[*`]/g, "").replace(/\s+/g, "").toLowerCase()
+}
+
+function matchesAny(text: string, keywords: ReadonlyArray<string>): boolean {
+  const normalized = normalizeHeading(text)
+  return keywords.some((keyword) => normalized.includes(keyword))
+}
+
+// A completion report is the final answer of a task: it has both a
+// deliverables section and a verification section. Extracting only those
+// sections keeps the log readable; the preamble ("done", thanks) is dropped.
+export function extractCompletionReport(text: string): string | undefined {
+  const lines = text.split("\n")
+  const headings: { level: number; text: string; start: number; end: number }[] = []
+  let fence: string | undefined
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    const marker = line.startsWith("```") ? "```" : line.startsWith("~~~") ? "~~~" : undefined
+    if (marker) {
+      if (!fence) fence = marker
+      else if (fence === marker) fence = undefined
+      continue
+    }
+    if (fence) continue
+    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(lines[i])
+    if (!match) continue
+    headings.push({ level: match[1].length, text: match[2], start: i, end: lines.length })
+  }
+
+  for (const heading of headings) {
+    const next = headings.find((candidate) => candidate.start > heading.start && candidate.level <= heading.level)
+    if (next) heading.end = next.start
+  }
+
+  if (!headings.some((heading) => matchesAny(heading.text, REPORT_DELIVERABLE))) return undefined
+  if (!headings.some((heading) => matchesAny(heading.text, REPORT_VERIFICATION))) return undefined
+
+  const targets = [...REPORT_DELIVERABLE, ...REPORT_STRUCTURE, ...REPORT_CONCLUSION, ...REPORT_VERIFICATION]
+  const selected: typeof headings = []
+  for (const heading of headings) {
+    if (!matchesAny(heading.text, targets)) continue
+    // A nested heading inside an already selected section is already covered.
+    if (selected.some((outer) => heading.start > outer.start && heading.start < outer.end)) continue
+    selected.push(heading)
+  }
+
+  const body = selected
+    .map((heading) => lines.slice(heading.start, heading.end).join("\n").trim())
+    .filter(Boolean)
+    .join("\n\n")
+  return body || undefined
+}
+
 export function formatSessionLogEntry(question: string, answer: string, time: number): string {
   return [
     `## ${new Date(time).toISOString()}`,
@@ -164,7 +223,8 @@ export function flushSessionLogResult(): Promise<void> {
   const pending = pendingResult
   if (!pending) return Promise.resolve()
   pendingResult = undefined
-  return appendEntry(formatSessionLogResult(pending.text, pending.time))
+  const report = extractCompletionReport(pending.text)
+  return appendEntry(formatSessionLogResult(report ?? pending.text, pending.time))
 }
 
 export function recordSessionLogUser(text: string, time: number): Promise<void> {
