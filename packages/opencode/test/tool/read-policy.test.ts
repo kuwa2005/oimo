@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Global } from "../../src/global"
-import { evaluateReadPolicy, resetReadPolicySession } from "../../src/tool/read-policy"
+import {
+  evaluateReadPolicy,
+  evaluateContentHashDedup,
+  fingerprintFileContent,
+  resetReadPolicySession,
+} from "../../src/tool/read-policy"
 import { SessionID } from "../../src/session/schema"
 import { Instance } from "../../src/project/instance"
 
@@ -53,5 +58,34 @@ describe("read-policy", () => {
         expect(second?.output).toContain("duplicate")
       },
     })
+  })
+
+  test("content hash dedup shortens unchanged re-read", () => {
+    resetReadPolicySession(sessionID)
+    const fp = fingerprintFileContent("hello\nworld")
+    const file = "/tmp/read-policy-same.txt"
+    expect(
+      evaluateContentHashDedup({
+        filepath: file,
+        sessionID,
+        fingerprint: fp,
+        previewLines: ["hello", "world"],
+      }),
+    ).toBeUndefined()
+    const second = evaluateContentHashDedup({
+      filepath: file,
+      sessionID,
+      fingerprint: fp,
+      previewLines: ["hello", "world"],
+    })
+    expect(second?.output).toContain("unchanged content")
+    const forced = evaluateContentHashDedup({
+      filepath: file,
+      sessionID,
+      fingerprint: fp,
+      force: true,
+      previewLines: ["hello", "world"],
+    })
+    expect(forced).toBeUndefined()
   })
 })

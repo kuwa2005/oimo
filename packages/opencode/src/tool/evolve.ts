@@ -89,7 +89,13 @@ export const EvolveTool = Tool.define(
           return {
             title: "Evolve dashboard",
             output: formatDashboard(d),
-            metadata: { operation: "dashboard" },
+            metadata: {
+              operation: "dashboard",
+              source: d.source,
+              briefs_open: d.briefsOpen,
+              brief_statuses: d.briefStatuses,
+              global_counts: d.globalCounts,
+            },
           }
         }
 

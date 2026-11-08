@@ -7,6 +7,7 @@
 - Install deps with `bun ci` (= `bun install --frozen-lockfile`) — install per `bun.lock`, don't mutate the lockfile. ⛔ Do NOT use `bun install`/`npm install`.
 - Release procedure and troubleshooting live in `docs/RELEASING.md` (Japanese). Cut a release with `./script/release <major|minor|patch>` (bumps versions, commits, and pushes a `v*` tag; the `release.yml` workflow builds and publishes automatically) — consult the runbook first.
 - `docs/index.html` (docs ビューア) は生成物 — 文書を追加・変更したら `bun script/build-docs-index.ts` で再生成する (pages.yml の CI でもデプロイ前に自動再生成される)。
+- 自己進化レポート `自己進化202611108.md` の構造検査は `bun script/verify-evolution-doc.ts`（ルートから実行、D1–D10）。
 - **機能追加の置き場:** 実装前に `docs/architecture/core-vs-skills.ja.md` で本隊 / ビルトイン / agent-skills を振り分ける。有用なビルトインは [`kuwa2005/agent-skills`](https://github.com/kuwa2005/agent-skills) にも載せる。Cursor ルール `.cursor/rules/feature-placement.mdc` が常時適用。
 
 ## Core Focus (as of 2025-06-18)

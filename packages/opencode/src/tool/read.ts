@@ -13,7 +13,7 @@ import { SessionCwd } from "./session-cwd"
 import { Instruction } from "../session/instruction"
 import { Provider } from "@/provider"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
-import { evaluateReadPolicy } from "./read-policy"
+import { evaluateReadPolicy, evaluateContentHashDedup, fingerprintFileContent } from "./read-policy"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -32,6 +32,10 @@ const parameters = z.object({
     ),
   offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
   limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
+  force: z
+    .boolean()
+    .optional()
+    .describe("When true, return full file content even if unchanged since the last read in this session"),
 })
 
 export const ReadTool = Tool.define(
@@ -348,9 +352,35 @@ export const ReadTool = Tool.define(
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
-      const file = yield* Effect.promise(() =>
-        lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset ?? 1 }),
-      )
+      const offset = params.offset ?? 1
+      const limit = params.limit ?? DEFAULT_READ_LIMIT
+      if (offset === 1 && !params.force && stat.type === "File") {
+        const fullText = yield* Effect.promise(() => Bun.file(filepath).text().catch(() => ""))
+        const fingerprint = fingerprintFileContent(fullText, {
+          size: Number(stat.size),
+          mtimeMs: Number(stat.mtime),
+        })
+        const dedup = evaluateContentHashDedup({
+          filepath,
+          sessionID: ctx.sessionID,
+          fingerprint,
+          force: params.force,
+          previewLines: fullText.split("\n").slice(0, 20),
+        })
+        if (dedup) {
+          return {
+            title: dedup.title,
+            output: dedup.output,
+            metadata: {
+              preview: dedup.output.slice(0, 200),
+              truncated: false,
+              loaded: [] as string[],
+            },
+          }
+        }
+      }
+
+      const file = yield* Effect.promise(() => lines(filepath, { limit, offset }))
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),

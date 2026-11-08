@@ -15,6 +15,7 @@ import {
 } from "./autonomy.sql"
 import type { AutonomyProfile, LearningLens } from "./resolve"
 import * as ConfigAutonomy from "@/config/autonomy"
+import { buildManifest } from "./evidence"
 
 const ALLOWED: Record<AutonomyPhase, AutonomyPhase[]> = {
   discover: ["lock_pending", "waiting_user", "blocked", "cancelled"],
@@ -220,13 +221,28 @@ export function transition(input: {
 
   const now = Date.now()
   const nextRevision = current.revision + 1
+  let evidenceManifestID = current.evidenceManifestID
+  const lockedScope = computed.lockedScope ?? current.lockedScope
+  let counters = current.counters
+  if (input.event.type === "judge_complete" && lockedScope) {
+    const manifest = buildManifest({
+      runID: current.id,
+      lockedScope,
+      codeRevision: String(current.revision),
+      changedRepositories: lockedScope.repositories,
+    })
+    evidenceManifestID = manifest.id
+    counters = { ...counters, judgeAttempts: counters.judgeAttempts + 1 }
+  }
   Database.Client()
     .update(AutonomyRunTable)
     .set({
       phase: computed.phase,
       revision: nextRevision,
       stop_reason: computed.stopReason ?? null,
-      locked_scope: computed.lockedScope ?? current.lockedScope,
+      locked_scope: lockedScope,
+      evidence_manifest_id: evidenceManifestID ?? null,
+      counters,
       time_updated: now,
     })
     .where(and(eq(AutonomyRunTable.id, input.id), eq(AutonomyRunTable.revision, input.expectedRevision)))
@@ -301,7 +317,39 @@ export function bumpCounter(input: {
     })
     .where(and(eq(AutonomyRunTable.id, input.id), eq(AutonomyRunTable.revision, current.revision)))
     .run()
+  const after = getRun(input.id)
+  if (!after) return
+  enforceBudgets(after)
   return getRun(input.id)
+}
+
+function budgetStopReason(field: keyof AutonomyCounters): AutonomyStopReason {
+  if (field === "testAttempts") return "budget_test_attempts"
+  if (field === "judgeAttempts") return "budget_judge_attempts"
+  if (field === "modelTurns") return "budget_model_turns"
+  return "budget_test_attempts"
+}
+
+/** Block run when a counter exceeds configured budgets (best-effort). */
+export function enforceBudgets(run: AutonomyRunRecord): AutonomyRunRecord | undefined {
+  const limits: Array<{ field: keyof AutonomyCounters; max: number | undefined }> = [
+    { field: "testAttempts", max: run.budgets.maxTestAttempts },
+    { field: "judgeAttempts", max: run.budgets.judgeMaxRetries },
+    { field: "modelTurns", max: run.budgets.maxTurns },
+  ]
+  const hit = limits.find((l) => l.max != null && run.counters[l.field] > (l.max ?? Infinity))
+  if (!hit || run.phase === "completed" || run.phase === "cancelled" || run.phase === "blocked") return run
+  Database.Client()
+    .update(AutonomyRunTable)
+    .set({
+      phase: "blocked",
+      stop_reason: budgetStopReason(hit.field),
+      revision: run.revision + 1,
+      time_updated: Date.now(),
+    })
+    .where(and(eq(AutonomyRunTable.id, run.id), eq(AutonomyRunTable.revision, run.revision)))
+    .run()
+  return getRun(run.id)
 }
 
 export function updateProfile(input: {

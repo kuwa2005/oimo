@@ -1,4 +1,5 @@
 import path from "path"
+import { createHash } from "crypto"
 import { parsePath, type MemoryType } from "@/memory/paths"
 import { Instance } from "@/project/instance"
 
@@ -13,6 +14,10 @@ type ReadKey = string
 
 const sessionReads = new Map<string, Map<ReadKey, number>>()
 
+type ContentReadState = { fingerprint: string; readCount: number }
+
+const sessionContentReads = new Map<string, Map<string, ContentReadState>>()
+
 function normalizeAbs(filepath: string) {
   return path.normalize(path.resolve(filepath))
 }
@@ -24,6 +29,49 @@ function readKey(filepath: string, offset: number, limit: number) {
 /** Test hook: clear per-session dedup state. */
 export function resetReadPolicySession(sessionID: string) {
   sessionReads.delete(sessionID)
+  sessionContentReads.delete(sessionID)
+}
+
+export function fingerprintFileContent(fullText: string, stat?: { size: number; mtimeMs: number }): string {
+  if (fullText.length <= 512 * 1024) {
+    return createHash("sha256").update(fullText).digest("hex").slice(0, 24)
+  }
+  if (!stat) return createHash("sha256").update(fullText.slice(0, 8192)).digest("hex").slice(0, 24)
+  return createHash("sha256").update(`${stat.size}:${stat.mtimeMs}`).digest("hex").slice(0, 24)
+}
+
+export function evaluateContentHashDedup(input: {
+  filepath: string
+  sessionID: string
+  fingerprint: string
+  force?: boolean
+  previewLines: string[]
+}): ReadPolicyResult | undefined {
+  if (input.force) return undefined
+  const filepath = normalizeAbs(input.filepath)
+  const perSession = sessionContentReads.get(input.sessionID) ?? new Map<string, ContentReadState>()
+  sessionContentReads.set(input.sessionID, perSession)
+  const prev = perSession.get(filepath)
+  if (!prev || prev.fingerprint !== input.fingerprint) {
+    perSession.set(filepath, { fingerprint: input.fingerprint, readCount: 1 })
+    return undefined
+  }
+  prev.readCount += 1
+  const head = input.previewLines.slice(0, 20).join("\n")
+  const rel = path.basename(filepath)
+  return {
+    title: rel,
+    output: skipOutput(
+      filepath,
+      [
+        `Read skipped (unchanged content): same content as read #${prev.readCount - 1} (fingerprint ${input.fingerprint.slice(0, 12)}…).`,
+        "Use prior tool output in the transcript or pass force=true on read for a full reload.",
+        head ? `Preview:\n${head}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    ),
+  }
 }
 
 function skipOutput(filepath: string, body: string) {

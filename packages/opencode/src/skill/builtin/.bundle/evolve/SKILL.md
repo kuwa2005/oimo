@@ -76,7 +76,10 @@ Create → Verify → Tell user → Iterate or delete
 
 Broken extensions are worse than none. Briefs need complete sections, not essays.
 Keep `~/.oimo/evolve/<projectID>/INDEX.md` and append `~/.oimo/evolve/<projectID>/history/HISTORY.md` when you
-write evolve artifacts.
+write evolve artifacts. **INDEX open/closed checkboxes are derived from each brief's `Status:` line** — do not
+mark `[x]` by hand without updating the brief. Regenerate INDEX with a `Generated from brief files at <ISO-8601>` header.
+Hard briefs need **Owner** and **Verification command** at the top; friction metrics need an explicit **window label**
+(`14d` / `30d` / `180d`). If `evolve_status` reports `source: global`, inventory lives under `~/.oimo/evolve/global/`.
 
 ## Creating tools / hooks
 

@@ -1,17 +1,31 @@
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "@/global"
+import { readBriefStatuses, countOpenBriefs, openBriefFiles, type BriefStatusEntry } from "./brief-status"
+import { resolveEvolveRootsAsync, type EvolveRootSource } from "./evolve-scope"
 
 export type EvolveDashboard = {
   root: string
+  projectRoot: string
+  globalRoot: string
+  source: EvolveRootSource
   index?: string
   backlogOpen: number
+  /** Brief filenames still open by Status meta (not raw file count). */
   briefsOpen: string[]
+  /** All brief files under effective root. */
+  briefsAll: string[]
+  briefStatuses: BriefStatusEntry[]
   frictionReports: string[]
   reviews: string[]
   historyHead?: string
   skillsCount: number
   pendingHandoffs: number
+  globalCounts?: {
+    backlogOpen: number
+    briefsOpen: number
+    briefsAll: number
+  }
 }
 
 /** Parent dir for all projects' self-evolution logs: `~/.oimo/evolve`. */
@@ -43,14 +57,41 @@ async function listMarkdown(dir: string) {
   }
 }
 
+async function countBacklogOpen(backlogPath: string): Promise<number> {
+  const backlog = await readIfExists(backlogPath)
+  return backlog
+    ? [...backlog.matchAll(/Status:\s*(Detected|Analyzing|Candidate|Approved|Instruction Generated)/gi)].length
+    : 0
+}
+
+async function loadRootSlice(root: string) {
+  const briefStatuses = await readBriefStatuses(path.join(root, "briefs"))
+  const briefsAll = briefStatuses.map((b) => b.file)
+  return {
+    briefStatuses,
+    briefsAll,
+    briefsOpen: openBriefFiles(briefStatuses),
+    backlogOpen: await countBacklogOpen(path.join(root, "backlog", "BACKLOG.md")),
+    frictionReports: await listMarkdown(path.join(root, "friction")),
+    reviews: await listMarkdown(path.join(root, "reviews")),
+    index: await readIfExists(path.join(root, "INDEX.md")),
+    history: await readIfExists(path.join(root, "history", "HISTORY.md")),
+  }
+}
+
 export async function loadDashboard(input: { projectID: string; worktree: string }): Promise<EvolveDashboard> {
-  const root = evolveRoot(input.projectID)
-  const index = await readIfExists(path.join(root, "INDEX.md"))
-  const backlog = await readIfExists(path.join(root, "backlog", "BACKLOG.md"))
-  const history = await readIfExists(path.join(root, "history", "HISTORY.md"))
-  const briefsOpen = await listMarkdown(path.join(root, "briefs"))
-  const frictionReports = await listMarkdown(path.join(root, "friction"))
-  const reviews = await listMarkdown(path.join(root, "reviews"))
+  const roots = await resolveEvolveRootsAsync(input.projectID)
+  const effective = await loadRootSlice(roots.effective)
+
+  let globalCounts: EvolveDashboard["globalCounts"]
+  if (roots.source === "global" && input.projectID !== "global") {
+    const g = await loadRootSlice(roots.global)
+    globalCounts = {
+      backlogOpen: g.backlogOpen,
+      briefsOpen: countOpenBriefs(g.briefStatuses),
+      briefsAll: g.briefsAll.length,
+    }
+  }
 
   let skillsCount = 0
   try {
@@ -60,11 +101,7 @@ export async function loadDashboard(input: { projectID: string; worktree: string
     skillsCount = 0
   }
 
-  const backlogOpen = backlog
-    ? [...backlog.matchAll(/Status:\s*(Detected|Analyzing|Candidate|Approved|Instruction Generated)/gi)].length
-    : 0
-
-  const historyHead = history
+  const historyHead = effective.history
     ?.split(/\n(?=## )/)
     .filter((b) => b.startsWith("## "))
     .at(0)
@@ -73,36 +110,67 @@ export async function loadDashboard(input: { projectID: string; worktree: string
     .join("\n")
 
   return {
-    root,
-    index,
-    backlogOpen,
-    briefsOpen,
-    frictionReports,
-    reviews,
+    root: roots.effective,
+    projectRoot: roots.project,
+    globalRoot: roots.global,
+    source: roots.source,
+    index: effective.index,
+    backlogOpen: effective.backlogOpen,
+    briefsOpen: effective.briefsOpen,
+    briefsAll: effective.briefsAll,
+    briefStatuses: effective.briefStatuses,
+    frictionReports: effective.frictionReports,
+    reviews: effective.reviews,
     historyHead,
     skillsCount,
-    pendingHandoffs: briefsOpen.length,
+    pendingHandoffs: effective.briefsOpen.length,
+    globalCounts,
   }
 }
 
 export function formatDashboard(d: EvolveDashboard): string {
+  const sourceLine =
+    d.source === "global"
+      ? `Data source: **global** fallback (project tree empty; counts below are from \`${d.globalRoot}\`)`
+      : d.source === "project"
+        ? `Data source: **project** (\`${d.root}\`)`
+        : `Data source: **none** (no evolve artifacts under project or global)`
   return [
     `# Self Evolution`,
     ``,
     `Root: \`${d.root}\``,
+    sourceLine,
     ``,
     `| Metric | Value |`,
     `|--------|-------|`,
     `| Skills (project) | ${d.skillsCount} |`,
     `| Backlog open | ${d.backlogOpen} |`,
-    `| Briefs | ${d.briefsOpen.length} |`,
+    `| Briefs open (by Status) | ${d.briefsOpen.length} |`,
+    `| Brief files total | ${d.briefsAll.length} |`,
     `| Pending handoffs | ${d.pendingHandoffs} |`,
     `| Friction reports | ${d.frictionReports.length} |`,
     `| Reviews | ${d.reviews.length} |`,
+    ...(d.globalCounts
+      ? [
+          ``,
+          `### Global inventory (referenced)`,
+          ``,
+          `| Metric | Value |`,
+          `|--------|-------|`,
+          `| Global backlog open | ${d.globalCounts.backlogOpen} |`,
+          `| Global briefs open | ${d.globalCounts.briefsOpen} |`,
+          `| Global brief files | ${d.globalCounts.briefsAll} |`,
+        ]
+      : []),
     ``,
     `## Open briefs (human handoff)`,
     ...(d.briefsOpen.length
       ? d.briefsOpen.slice(0, 12).map((b) => `- ${b} — pass to external agent; do not auto-apply`)
+      : ["- (none)"]),
+    ``,
+    `## Brief status summary`,
+    ...(d.briefStatuses.length
+      ? d.briefStatuses.map((s) => `- ${s.file}: ${s.lifecycle}${s.warning ? ` (${s.warning})` : ""}`)
       : ["- (none)"]),
     ``,
     `## Recent friction`,

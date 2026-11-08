@@ -360,6 +360,16 @@ append an evaluation note to history comparing before/after metrics if possible.
 
 # Dashboard + history (always)
 
+## INDEX derivation (R-07)
+
+Brief files under `briefs/*.md` are the **source of truth** for status. Each brief MUST include a `Status:` line in Meta (Verified / Implemented / Open).
+When updating evolve artifacts, regenerate INDEX checklist from brief Status lines (do not hand-maintain open checkboxes). Include header `Generated from brief files at <ISO-8601>`.
+When `evolve_status` dashboard shows `source: global`, counts come from `~/.oimo/evolve/global/` — not "no improvements".
+
+## Brief handoff template (R-11)
+
+Every hard-evolution brief MUST list **Owner** and **Verification command** near the top (before section 1). Metrics in friction/reviews MUST include a window label (`14d`, `30d`, `180d`, or explicit gate window).
+
 ## `~/.oimo/evolve/<projectID>/INDEX.md`
 
 ```markdown
