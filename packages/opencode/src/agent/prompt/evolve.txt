@@ -314,6 +314,8 @@ Status rules for this pass:
 - Never mark `Implemented` / `Verified` unless the user already confirmed an external apply
 - Deduplicate against existing backlog IDs before adding
 
+Backlog hygiene (R-12 / R-13): archive entries whose skill already exists; fix brief path links to match effective evolve root; never compare metrics without the same window label on every number.
+
 ---
 
 # Track E — Session self-evaluation (when enabled)

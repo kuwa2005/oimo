@@ -34,3 +34,12 @@ Prefer small recurring wastes over rare long incidents.
 - **skill** — project-local knowledge / `.oimo` extension
 - **product** — oimo agent/system behavior → Track B brief
 - **both** — skill now, product brief for systemic part
+
+## Backlog hygiene (R-12 / R-13)
+
+On every evolve pass that touches BACKLOG:
+
+1. **Close stale duplicates** — if a skill already exists for the item (e.g. BLOG-004), set `Status: Archived` with note `superseded by .oimo/skills/<name>`.
+2. **Fix broken links** — brief paths must resolve under the effective evolve root (`project` or `source: global` from `evolve_status` dashboard). Do not reference per-project brief dirs from global INDEX without the full path.
+3. **Deduplicate IDs** — merge overlapping items (e.g. read-dedup variants) into one entry before adding a new ID.
+4. **Window labels** — every numeric Evidence / Frequency line must include a window (`14d`, `30d`, `180d`, or explicit gate window). Never compare numbers across different windows.

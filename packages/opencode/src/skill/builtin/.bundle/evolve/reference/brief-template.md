@@ -7,12 +7,14 @@ An external coding agent should be able to implement from this file alone.
 # Evolve Brief: <imperative title>
 
 ## Meta
+- Owner: <who implements this brief>
+- Verification: `<command that proves acceptance, run from packages/opencode when applicable>`
 - ID: EVB-YYYYMMDD-<slug>
 - Generated: <ISO-8601>
 - Priority: P0|P1|P2|P3
 - Improvement Score: <frequency × time_loss × impact × recurrence>
 - Scope: oimo product (not project-local .oimo/)
-- Evidence window: last <N> days
+- Evidence window: last <N> days (`14d` / `30d` / `180d` — label every metric)
 - Status: Instruction Generated
 - Human Attention Cost signal: <high|medium|low> — <one line>
 
