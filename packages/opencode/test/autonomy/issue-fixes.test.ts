@@ -146,3 +146,61 @@ describe("#72 FDE PoC attempts and metrics", () => {
     expect(getLatestManifest(run.id)?.metrics?.[0]?.name).toBe("集計時間")
   })
 })
+
+describe("#74 fresh passing attempts compare code state, not run revision", () => {
+  test("codeFingerprint is stable for unchanged code and changes on edits and new files", async () => {
+    const { codeFingerprint } = await import("../../src/autonomy/test-attempt")
+    const { tmpdir } = await import("../fixture/fixture")
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(`${tmp.path}/a.ts`, "export const a = 1\n")
+    await Bun.$`git -C ${tmp.path} add -A && git -C ${tmp.path} commit -qm init`.quiet()
+    const clean = codeFingerprint(tmp.path)
+    expect(clean.startsWith("git:")).toBe(true)
+    expect(codeFingerprint(tmp.path)).toBe(clean)
+    await Bun.write(`${tmp.path}/a.ts`, "export const a = 2\n")
+    const edited = codeFingerprint(tmp.path)
+    expect(edited).not.toBe(clean)
+    await Bun.write(`${tmp.path}/b.ts`, "export const b = 1\n")
+    expect(codeFingerprint(tmp.path)).not.toBe(edited)
+  })
+
+  test("outside git the fingerprint is the constant nogit", async () => {
+    const { codeFingerprint } = await import("../../src/autonomy/test-attempt")
+    const { tmpdir } = await import("../fixture/fixture")
+    await using tmp = await tmpdir({ outsideGit: true })
+    expect(codeFingerprint(tmp.path)).toBe("nogit")
+  })
+
+  test("a passing attempt on the same code is fresh even after the run revision moved on", () => {
+    const session = sid("fresh")
+    const run = applySessionMode({ mode: "se", scope: "session", sessionID: session, projectID: "p74" }).run!
+    const lockedScope = scope()
+    const proposal = JSON.stringify(lockedScope)
+    const gate = AutonomyGate.createGate({
+      runID: run.id,
+      kind: "requirements_lock",
+      proposalText: proposal,
+      questionRequestID: "qr74",
+      questionIndex: 0,
+    })
+    AutonomyGate.respondToGate({ gateID: gate.id, answers: [["approved"]], proposalTextNow: proposal, lockedScope })
+    recordTestAttempt({
+      runID: run.id,
+      kind: "test",
+      command: ["bash", "-lc", "bun test"],
+      environmentFingerprint: "env",
+      codeRevision: "git:same",
+      startedAt: Date.now(),
+      durationMs: 3,
+      exitCode: 0,
+      status: "passed",
+    })
+    AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
+    AutonomyRun.bumpCounter({ id: run.id, field: "modelTurns" })
+    const done = AutonomyRun.recordJudgeComplete(session, undefined, undefined, "git:same")
+    expect(done?.phase).toBe("completed")
+    const manifest = getLatestManifest(run.id)!
+    expect(manifest.acceptance.every((a) => a.status === "met")).toBe(true)
+    expect(manifest.unresolved).toEqual([])
+  })
+})

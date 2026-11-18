@@ -2,6 +2,8 @@
  * TestAttempt + failure classification + retry budget (FDE/SE §10.3–10.5).
  */
 import { createHash, randomBytes } from "crypto"
+import { statSync } from "fs"
+import path from "path"
 import { Database, eq, and, desc } from "@/storage"
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
 
@@ -13,6 +15,32 @@ export type TestAttemptKind = "test" | "check" | "poc"
 const TEST_COMMAND_RE =
   /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?test|npx\s+(?:vitest|jest|playwright\s+test)|vitest|jest|pytest|python3?\s+-m\s+(?:pytest|unittest)|go\s+test|cargo\s+test|node\s+--test|deno\s+test|make\s+(?:test|check)|mvn\s+(?:-\S+\s+)*test|gradlew?\s+(?:\S+\s+)*test|phpunit|rspec|dotnet\s+test)\b/i
 const CHECK_COMMAND_RE = /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?typecheck|tsc\s+(?:\S+\s+)*--noEmit|tsgo\s+(?:\S+\s+)*--noEmit)\b/i
+
+/**
+ * Fingerprint of the working tree's code state: HEAD + `git diff HEAD` + untracked files (name, size, mtime).
+ * Test attempts and the evidence manifest both use it as `codeRevision`, so "fresh" means "same code".
+ * Outside git (or before the first commit) it is the constant "nogit": freshness then cannot be told apart.
+ */
+export function codeFingerprint(dir: string): string {
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "ignore" })
+  const head = git("rev-parse", "HEAD")
+  if (head.exitCode !== 0) return "nogit"
+  const untracked = git("ls-files", "--others", "--exclude-standard", "-z")
+    .stdout.toString()
+    .split("\0")
+    .filter(Boolean)
+    .map((file) => {
+      const stat = statSync(path.join(dir, file), { throwIfNoEntry: false })
+      return `${file}:${stat?.size ?? -1}:${stat?.mtimeMs ?? -1}`
+    })
+    .join("\n")
+  return `git:${createHash("sha256")
+    .update(head.stdout)
+    .update(git("diff", "HEAD", "--no-ext-diff", "--binary").stdout)
+    .update(untracked)
+    .digest("hex")
+    .slice(0, 24)}`
+}
 
 /** Classify a shell command as a verification run; undefined when it is neither a test nor a check. */
 export function classifyVerificationCommand(command: string): Exclude<TestAttemptKind, "poc"> | undefined {

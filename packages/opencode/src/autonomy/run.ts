@@ -41,7 +41,7 @@ export type AutonomyEvent =
   | { type: "implementation_done" }
   | { type: "verify_passed" }
   | { type: "verify_failed" }
-  | { type: "judge_complete"; metrics?: FdeMetrics }
+  | { type: "judge_complete"; metrics?: FdeMetrics; codeRevision?: string }
   | { type: "judge_rework"; next: "execute" | "verify" }
   | { type: "block"; reason: AutonomyStopReason }
   | { type: "cancel" }
@@ -228,7 +228,8 @@ export function transition(input: {
     const manifest = buildManifest({
       runID: current.id,
       lockedScope,
-      codeRevision: String(current.revision),
+      // Must match the codeRevision test attempts were recorded with (codeFingerprint of the worktree).
+      codeRevision: input.event.codeRevision ?? String(current.revision),
       changedRepositories: lockedScope.repositories,
       metrics: input.event.metrics,
     })
@@ -381,10 +382,14 @@ export function recordGoalStop(sessionID: string, reason: string): AutonomyRunRe
   })
 }
 
-function judgeCompleteStep(phase: AutonomyPhase, metrics?: FdeMetrics): AutonomyEvent | undefined {
+function judgeCompleteStep(
+  phase: AutonomyPhase,
+  metrics?: FdeMetrics,
+  codeRevision?: string,
+): AutonomyEvent | undefined {
   if (phase === "execute") return { type: "implementation_done" }
   if (phase === "verify") return { type: "verify_passed" }
-  if (phase === "judge") return { type: "judge_complete", metrics }
+  if (phase === "judge") return { type: "judge_complete", metrics, codeRevision }
   return
 }
 
@@ -425,9 +430,10 @@ export function recordJudgeComplete(
   sessionID: string,
   objective?: string,
   metrics?: FdeMetrics,
+  codeRevision?: string,
 ): AutonomyRunRecord | undefined {
   const advance = (run: AutonomyRunRecord): AutonomyRunRecord => {
-    const event = judgeCompleteStep(run.phase, metrics)
+    const event = judgeCompleteStep(run.phase, metrics, codeRevision)
     if (!event) return run
     return advance(transition({ id: run.id, expectedRevision: run.revision, event, eventID: "goal_judge_ok" }))
   }

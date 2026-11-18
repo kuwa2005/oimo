@@ -1137,7 +1137,7 @@ export const BashTool = Tool.define(
               ).pipe(
                 Effect.tap((result) =>
                   Effect.gen(function* () {
-                    const { classifyVerificationCommand, recordTestAttempt, failureSignature, classifyFailure } =
+                    const { classifyVerificationCommand, codeFingerprint, recordTestAttempt, failureSignature, classifyFailure } =
                       yield* Effect.promise(() => import("@/autonomy/test-attempt"))
                     const verification = classifyVerificationCommand(params.command)
                     if (!verification) return
@@ -1164,7 +1164,7 @@ export const BashTool = Tool.define(
                       kind: poc ? "poc" : verification,
                       command: cmd,
                       environmentFingerprint: `${process.platform}:${process.version}`,
-                      codeRevision: String(arun.revision),
+                      codeRevision: codeFingerprint(Instance.worktree),
                       startedAt,
                       durationMs: Date.now() - startedAt,
                       exitCode: exit,

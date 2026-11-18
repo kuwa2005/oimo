@@ -127,6 +127,7 @@ import { SessionRunState } from "./run-state"
 import { Goal } from "./goal"
 import { recordJudgeComplete } from "@/autonomy/run"
 import { FdeMetrics } from "@/autonomy/evidence"
+import { codeFingerprint } from "@/autonomy/test-attempt"
 import { sessionAutonomyConfig } from "@/autonomy/session-mode"
 import { consumeBrief, WARM_START_MARKER } from "./warm-start"
 import { TaskRegistry } from "@/task/registry"
@@ -3487,7 +3488,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 "metrics.json",
               )
               const metrics = yield* Effect.promise(() => Bun.file(metricsFile).json().catch(() => undefined))
-              recordJudgeComplete(sessionID, active.condition, FdeMetrics.safeParse(metrics).data)
+              recordJudgeComplete(
+                sessionID,
+                active.condition,
+                FdeMetrics.safeParse(metrics).data,
+                codeFingerprint(instance.worktree),
+              )
             }
             yield* goal.stopWithReason({
               sessionID,
