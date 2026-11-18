@@ -1062,7 +1062,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "system",
     },
     {
-      title: "Multi-repo /repos",
+      title: t("tui.command.repos.title"),
       value: "repos.workspace",
       slash: {
         name: "repos",

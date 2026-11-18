@@ -7,6 +7,8 @@ const BUILTIN = new Set([
   "self-improve",
   "goal",
   "deep-research",
+  "loops",
+  "rebuild",
 ])
 
 export function slashCommandDescription(

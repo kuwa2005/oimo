@@ -271,6 +271,13 @@ export const dict: Record<string, string> = {
     "Analyze product and business data, design KPIs, and build dashboards and reports",
   "tui.skill.product-design.description": "Research, audit, prototype, and validate product and UX designs",
   "tui.skill.sales.description": "Prepare meetings, research accounts, plan deals, and work with sales systems",
+  "tui.slash.rebuild.description":
+    "rebuild the conversation context now from the latest checkpoint (frees context; keeps recent messages)",
+  "tui.slash.loops.description": "list active scheduled jobs; accepts `cancel <id>` to delete one",
+  "tui.skill.learn-everything.description": "Turn a PDF, paper, document, URL, or topic into a structured interactive learning course",
+  "tui.skill.memory-search.description": "Query the raw trajectory SQLite database when built-in memory and history tools are insufficient",
+  "tui.skill.mimocode-docs.description": "Answer questions about Open Mimo Code itself: features, commands, keybindings, and configuration",
+  "tui.command.repos.title": "Multi-repo /repos",
   "tui.skill.compose:ask.description": "Ask the user for decisions or clarifications",
   "tui.skill.compose:brainstorm.description": "Explore requirements and design before implementation",
   "tui.skill.compose:debug.description": "Systematic debugging before proposing fixes",
