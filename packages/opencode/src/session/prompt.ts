@@ -125,6 +125,7 @@ import { InstanceState } from "@/effect"
 import { ActorTool, type ActorPromptOps } from "@/tool/actor"
 import { SessionRunState } from "./run-state"
 import { Goal } from "./goal"
+import { recordJudgeComplete } from "@/autonomy/run"
 import { consumeBrief, WARM_START_MARKER } from "./warm-start"
 import { TaskRegistry } from "@/task/registry"
 import { EffectBridge } from "@/effect"
@@ -3475,6 +3476,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               impossible: verdict.impossible === true,
             })
+            if (verdict.ok && !verdict.impossible && !("judgeFailed" in verdict)) recordJudgeComplete(sessionID)
             yield* goal.stopWithReason({
               sessionID,
               reason: verdict.impossible ? "impossible" : "completed",

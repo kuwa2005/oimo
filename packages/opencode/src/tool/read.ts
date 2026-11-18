@@ -364,6 +364,7 @@ export const ReadTool = Tool.define(
           filepath,
           sessionID: ctx.sessionID,
           fingerprint,
+          limit,
           force: params.force,
           previewLines: fullText.split("\n").slice(0, 20),
         })

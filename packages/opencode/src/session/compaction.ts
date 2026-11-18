@@ -18,6 +18,7 @@ import { InstanceState } from "@/effect"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import { resetReadPolicySession } from "@/tool/read-policy"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -488,6 +489,7 @@ export const layer: Layer.Layer<
       }
 
       if (processor.message.error) return "stop"
+      if (result === "continue") resetReadPolicySession(input.sessionID)
       if (result === "continue")
         yield* bus.publish(Event.Compacted, {
           sessionID: input.sessionID,
@@ -527,6 +529,7 @@ export const layer: Layer.Layer<
       // Boundary-insert path also drops effective context from the model's
       // view — publish Compacted so downstream caches (cron sentinel etc)
       // reset on their side too. Same event shape as processCompaction.
+      resetReadPolicySession(input.sessionID)
       yield* bus.publish(Event.Compacted, {
         sessionID: input.sessionID,
         ...(input.agentID ? { agentID: input.agentID } : {}),

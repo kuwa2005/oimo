@@ -69,6 +69,7 @@ describe("read-policy", () => {
         filepath: file,
         sessionID,
         fingerprint: fp,
+        limit: 2000,
         previewLines: ["hello", "world"],
       }),
     ).toBeUndefined()
@@ -76,6 +77,7 @@ describe("read-policy", () => {
       filepath: file,
       sessionID,
       fingerprint: fp,
+      limit: 2000,
       previewLines: ["hello", "world"],
     })
     expect(second?.output).toContain("unchanged content")
@@ -83,9 +85,22 @@ describe("read-policy", () => {
       filepath: file,
       sessionID,
       fingerprint: fp,
+      limit: 2000,
       force: true,
       previewLines: ["hello", "world"],
     })
     expect(forced).toBeUndefined()
+  })
+
+  test("content hash dedup does not skip a wider read of unchanged content", () => {
+    resetReadPolicySession(sessionID)
+    const fp = fingerprintFileContent("a\nb\nc")
+    const file = "/tmp/read-policy-wider.txt"
+    const read = (limit: number) =>
+      evaluateContentHashDedup({ filepath: file, sessionID, fingerprint: fp, limit, previewLines: ["a"] })
+    expect(read(50)).toBeUndefined()
+    expect(read(2000)).toBeUndefined()
+    expect(read(2000)?.output).toContain("unchanged content")
+    expect(read(50)?.output).toContain("unchanged content")
   })
 })

@@ -15,7 +15,7 @@ import { Session } from "@/session"
 import { SessionID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { AutonomyBridge } from "@/autonomy/bridge"
-import { getLatestRunForSession } from "@/autonomy/run"
+import { getLatestRunForSession, recordGoalReentry, recordGoalStop } from "@/autonomy/run"
 import type { GoalPhase } from "./goal-ref"
 import { canonicalizeGoalPhase } from "./goal-ref"
 
@@ -390,6 +390,7 @@ export const layer = Layer.effect(
       const goal = data.goals.get(input.sessionID)
       if (!goal) return
       goal.stopReason = input.reason
+      recordGoalStop(input.sessionID, input.reason)
       yield* publish({
         sessionID: input.sessionID,
         stopReason: input.reason,
@@ -413,6 +414,7 @@ export const layer = Layer.effect(
       const goal = data.goals.get(sessionID)
       if (!goal) return 0
       goal.react += 1
+      recordGoalReentry(sessionID)
       yield* publish({ sessionID, goal })
       return goal.react
     })

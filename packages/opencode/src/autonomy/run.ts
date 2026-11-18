@@ -352,6 +352,55 @@ export function enforceBudgets(run: AutonomyRunRecord): AutonomyRunRecord | unde
   return getRun(run.id)
 }
 
+const ACTIVE_PHASES = new Set<AutonomyPhase>(["discover", "execute", "verify", "judge", "waiting_user"])
+
+const GOAL_BUDGET_STOP: Record<"budget_turns" | "budget_duration" | "budget_cost" | "judge_failed", AutonomyStopReason> = {
+  budget_turns: "budget_model_turns",
+  budget_duration: "budget_duration",
+  budget_cost: "budget_cost",
+  judge_failed: "judge_unavailable",
+}
+
+/** Mirror one judge-driven goal re-entry into the durable run's `modelTurns` counter (budget `maxTurns`). */
+export function recordGoalReentry(sessionID: string): AutonomyRunRecord | undefined {
+  const run = getLatestRunForSession(sessionID)
+  if (!run || !ACTIVE_PHASES.has(run.phase)) return run
+  return bumpCounter({ id: run.id, field: "modelTurns" })
+}
+
+/** Mark the durable run blocked when the in-memory goal stops on a budget or an unavailable judge. No-op for other reasons. */
+export function recordGoalStop(sessionID: string, reason: string): AutonomyRunRecord | undefined {
+  const run = getLatestRunForSession(sessionID)
+  if (!run || !ACTIVE_PHASES.has(run.phase)) return run
+  if (!(reason in GOAL_BUDGET_STOP)) return run
+  return transition({
+    id: run.id,
+    expectedRevision: run.revision,
+    event: { type: "block", reason: GOAL_BUDGET_STOP[reason as keyof typeof GOAL_BUDGET_STOP] },
+  })
+}
+
+const JUDGE_COMPLETE_STEP: Partial<Record<AutonomyPhase, AutonomyEvent>> = {
+  execute: { type: "implementation_done" },
+  verify: { type: "verify_passed" },
+  judge: { type: "judge_complete" },
+}
+
+/**
+ * The independent goal judge accepted the work: advance execute → verify → judge → completed.
+ * `judge_complete` persists the evidence manifest. Runs outside these phases (e.g. lock not yet approved) are left as-is.
+ */
+export function recordJudgeComplete(sessionID: string): AutonomyRunRecord | undefined {
+  const advance = (run: AutonomyRunRecord): AutonomyRunRecord => {
+    const event = JUDGE_COMPLETE_STEP[run.phase]
+    if (!event) return run
+    return advance(transition({ id: run.id, expectedRevision: run.revision, event, eventID: "goal_judge_ok" }))
+  }
+  const run = getLatestRunForSession(sessionID)
+  if (!run) return
+  return advance(run)
+}
+
 export function updateProfile(input: {
   id: string
   expectedRevision: number

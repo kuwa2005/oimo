@@ -14,7 +14,8 @@ type ReadKey = string
 
 const sessionReads = new Map<string, Map<ReadKey, number>>()
 
-type ContentReadState = { fingerprint: string; readCount: number }
+/** `limit` is the widest line count already returned from offset 1 for this fingerprint. */
+type ContentReadState = { fingerprint: string; readCount: number; limit: number }
 
 const sessionContentReads = new Map<string, Map<string, ContentReadState>>()
 
@@ -26,7 +27,7 @@ function readKey(filepath: string, offset: number, limit: number) {
   return `${filepath}\0${offset}\0${limit}`
 }
 
-/** Test hook: clear per-session dedup state. */
+/** Clear per-session dedup state. Called on compaction: skipped reads point at prior output that is no longer in context. */
 export function resetReadPolicySession(sessionID: string) {
   sessionReads.delete(sessionID)
   sessionContentReads.delete(sessionID)
@@ -44,6 +45,8 @@ export function evaluateContentHashDedup(input: {
   filepath: string
   sessionID: string
   fingerprint: string
+  /** Lines requested from offset 1; a wider read than any prior one is never skipped. */
+  limit: number
   force?: boolean
   previewLines: string[]
 }): ReadPolicyResult | undefined {
@@ -53,7 +56,11 @@ export function evaluateContentHashDedup(input: {
   sessionContentReads.set(input.sessionID, perSession)
   const prev = perSession.get(filepath)
   if (!prev || prev.fingerprint !== input.fingerprint) {
-    perSession.set(filepath, { fingerprint: input.fingerprint, readCount: 1 })
+    perSession.set(filepath, { fingerprint: input.fingerprint, readCount: 1, limit: input.limit })
+    return undefined
+  }
+  if (input.limit > prev.limit) {
+    perSession.set(filepath, { fingerprint: input.fingerprint, readCount: prev.readCount + 1, limit: input.limit })
     return undefined
   }
   prev.readCount += 1
