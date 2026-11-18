@@ -3481,18 +3481,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             })
             if (verdict.ok && !verdict.impossible && !("judgeFailed" in verdict)) {
               const instance = yield* InstanceState.context
-              const metricsFile = path.resolve(
-                instance.worktree,
-                ConfigCompose.resolveDocsDir(instance.worktree, cfg.compose),
-                "reports",
-                "metrics.json",
-              )
+              const docsDir = ConfigCompose.resolveDocsDir(instance.worktree, cfg.compose)
+              const metricsFile = path.resolve(instance.worktree, docsDir, "reports", "metrics.json")
               const metrics = yield* Effect.promise(() => Bun.file(metricsFile).json().catch(() => undefined))
               recordJudgeComplete(
                 sessionID,
                 active.condition,
                 FdeMetrics.safeParse(metrics).data,
-                codeFingerprint(instance.worktree),
+                codeFingerprint(instance.worktree, [docsDir]),
               )
             }
             yield* goal.stopWithReason({

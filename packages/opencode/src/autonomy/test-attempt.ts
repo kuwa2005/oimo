@@ -20,12 +20,21 @@ const CHECK_COMMAND_RE = /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?ty
  * Fingerprint of the working tree's code state: HEAD + `git diff HEAD` + untracked files (name, size, mtime).
  * Test attempts and the evidence manifest both use it as `codeRevision`, so "fresh" means "same code".
  * Outside git (or before the first commit) it is the constant "nogit": freshness then cannot be told apart.
+ * `excludeDirs` (relative to `dir` or absolute) are left out so writing reports after a test keeps it fresh.
  */
-export function codeFingerprint(dir: string): string {
+export function codeFingerprint(dir: string, excludeDirs: string[] = []): string {
   const git = (...args: string[]) => Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "ignore" })
   const head = git("rev-parse", "HEAD")
   if (head.exitCode !== 0) return "nogit"
-  const untracked = git("ls-files", "--others", "--exclude-standard", "-z")
+  // Docs/reports written after the test run (compose specs/plans/reports, metrics.json) are not code.
+  const pathspec = [
+    ".",
+    ...excludeDirs
+      .map((d) => path.relative(dir, path.resolve(dir, d)))
+      .filter((d) => d && !d.startsWith("..") && !path.isAbsolute(d))
+      .map((d) => `:(exclude)${d}`),
+  ]
+  const untracked = git("ls-files", "--others", "--exclude-standard", "-z", "--", ...pathspec)
     .stdout.toString()
     .split("\0")
     .filter(Boolean)
@@ -36,7 +45,7 @@ export function codeFingerprint(dir: string): string {
     .join("\n")
   return `git:${createHash("sha256")
     .update(head.stdout)
-    .update(git("diff", "HEAD", "--no-ext-diff", "--binary").stdout)
+    .update(git("diff", "HEAD", "--no-ext-diff", "--binary", "--", ...pathspec).stdout)
     .update(untracked)
     .digest("hex")
     .slice(0, 24)}`

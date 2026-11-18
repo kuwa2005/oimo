@@ -204,3 +204,51 @@ describe("#74 fresh passing attempts compare code state, not run revision", () =
     expect(manifest.unresolved).toEqual([])
   })
 })
+
+describe("follow-up: docs writes and new tasks", () => {
+  test("writing under the compose docs dir does not change the code fingerprint", async () => {
+    const { codeFingerprint } = await import("../../src/autonomy/test-attempt")
+    const { tmpdir } = await import("../fixture/fixture")
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(`${tmp.path}/a.ts`, "export const a = 1\n")
+    await Bun.$`git -C ${tmp.path} add -A && git -C ${tmp.path} commit -qm init`.quiet()
+    const before = codeFingerprint(tmp.path, ["docs/compose"])
+    await Bun.write(`${tmp.path}/docs/compose/reports/report.md`, "# report\n")
+    await Bun.write(`${tmp.path}/docs/compose/reports/metrics.json`, "[]")
+    expect(codeFingerprint(tmp.path, ["docs/compose"])).toBe(before)
+    expect(codeFingerprint(tmp.path, [`${tmp.path}/docs/compose`])).toBe(before)
+    expect(codeFingerprint(tmp.path)).not.toBe(before)
+  })
+
+  test("a new goal after a budget block starts a fresh run with the same profile", () => {
+    const session = sid("rollover")
+    const run = applySessionMode({ mode: "fde", scope: "session", sessionID: session, projectID: "pnext" }).run!
+    AutonomyRun.transition({ id: run.id, expectedRevision: run.revision, event: { type: "block", reason: "budget_model_turns" } })
+    const next = AutonomyRun.startRunForNewGoal(session, "next task")!
+    expect(next.id).not.toBe(run.id)
+    expect(next.phase).toBe("discover")
+    expect(next.profile).toBe("fde")
+    expect(AutonomyRun.getRun(run.id)?.phase).toBe("cancelled")
+    expect(AutonomyRun.getLatestRunForSession(session)?.id).toBe(next.id)
+  })
+
+  test("a new goal keeps an in-flight run and ignores session-scoped off", () => {
+    const live = sid("live")
+    const run = applySessionMode({ mode: "se", scope: "session", sessionID: live, projectID: "pnext" }).run!
+    expect(AutonomyRun.startRunForNewGoal(live, "x")?.id).toBe(run.id)
+    const off = sid("offnext")
+    const offRun = applySessionMode({ mode: "none", scope: "session", sessionID: off, projectID: "pnext" }).run!
+    expect(AutonomyRun.startRunForNewGoal(off, "x")?.id).toBe(offRun.id)
+  })
+
+  test("super_auto: a second task in the same session still records completion", () => {
+    const session = sid("sa2")
+    applySessionMode({ mode: "special", scope: "session", sessionID: session, projectID: "pnext" })
+    expect(AutonomyRun.recordJudgeComplete(session, "first")?.phase).toBe("completed")
+    const second = AutonomyRun.startRunForNewGoal(session, "second")!
+    expect(second.profile).toBe("super_auto")
+    const done = AutonomyRun.recordJudgeComplete(session, "second")
+    expect(done?.id).toBe(second.id)
+    expect(done?.phase).toBe("completed")
+  })
+})

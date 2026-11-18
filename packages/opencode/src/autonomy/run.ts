@@ -2,7 +2,7 @@
  * AutonomyRun state machine — typed transitions with revision CAS.
  */
 import { randomBytes } from "crypto"
-import { Database, eq, and, desc } from "@/storage"
+import { Database, eq, and, desc, sql } from "@/storage"
 import {
   AutonomyRunTable,
   AutonomyRunAuditTable,
@@ -146,7 +146,8 @@ export function getLatestRunForSession(sessionID: string): AutonomyRunRecord | u
     .select()
     .from(AutonomyRunTable)
     .where(eq(AutonomyRunTable.session_id, sessionID))
-    .orderBy(desc(AutonomyRunTable.time_updated))
+    // rowid breaks same-millisecond ties (e.g. cancel old run + create next run) toward the newer row.
+    .orderBy(desc(AutonomyRunTable.time_updated), desc(sql`rowid`))
     .limit(1)
     .get()
   if (!row) return
@@ -440,6 +441,28 @@ export function recordJudgeComplete(
   const run = getLatestRunForSession(sessionID)
   if (!run) return
   return advance(autoLockSuperAuto(run, objective))
+}
+
+/**
+ * A new goal is a new task. When the session's latest run already ended (completed) or stopped on a
+ * budget (blocked), open a fresh run with the same profile so lock, budgets and evidence start over —
+ * otherwise the stale block stops every later goal and nothing of the new task is recorded.
+ */
+export function startRunForNewGoal(sessionID: string, userRequest: string): AutonomyRunRecord | undefined {
+  const run = getLatestRunForSession(sessionID)
+  if (!run || run.profile === "off") return run
+  if (run.phase !== "completed" && run.phase !== "blocked") return run
+  if (run.phase === "blocked") transition({ id: run.id, expectedRevision: run.revision, event: { type: "cancel" } })
+  return createRun({
+    sessionID,
+    projectID: run.projectID,
+    profile: run.profile,
+    learningLenses: run.learningLenses,
+    userRequest: userRequest.slice(0, 2000),
+    workspaceFingerprint: run.workspaceFingerprint,
+    repositoryIDs: run.repositoryIDs,
+    budgets: run.budgets,
+  })
 }
 
 export function updateProfile(input: {

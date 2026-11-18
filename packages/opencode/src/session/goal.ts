@@ -15,7 +15,7 @@ import { Session } from "@/session"
 import { SessionID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { AutonomyBridge } from "@/autonomy/bridge"
-import { getLatestRunForSession, recordGoalReentry, recordGoalStop } from "@/autonomy/run"
+import { getLatestRunForSession, recordGoalReentry, recordGoalStop, startRunForNewGoal } from "@/autonomy/run"
 import { sessionAutonomyConfig } from "@/autonomy/session-mode"
 import type { GoalPhase } from "./goal-ref"
 import { canonicalizeGoalPhase } from "./goal-ref"
@@ -324,6 +324,7 @@ export const layer = Layer.effect(
         evidenceManifestPath: binding?.evidenceManifestPath ?? input.evidenceManifestPath,
       }
       data.goals.set(sessionID, goal)
+      startRunForNewGoal(sessionID, ConfigAutonomy.extractUserRequest(input.condition) ?? input.condition)
       yield* Effect.tryPromise(async () => {
         const { persistGoalBinding } = await import("@/repo-workspace/goal-binding")
         await persistGoalBinding(sessionID, goal)

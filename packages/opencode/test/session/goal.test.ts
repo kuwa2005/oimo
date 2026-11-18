@@ -178,16 +178,21 @@ describe("Goal ↔ session-scoped autonomy (#66, #70)", () => {
       userRequest: "x",
       budgets: { maxTestAttempts: 1 },
     })
-    AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
-    AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
-    expect(AutonomyRun.getRun(run.id)?.phase).toBe("blocked")
-    const result = await runGoal(tmp.path, (goal) =>
+    const [result, nextTask] = await runGoal(tmp.path, (goal) =>
       Effect.gen(function* () {
         yield* goal.set(sessionID, { condition: "x", autonomous: true })
-        return yield* goal.checkBudget(sessionID)
+        AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
+        AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
+        const blocked = yield* goal.checkBudget(sessionID)
+        // The next task must not inherit the stale block: goal.set opens a fresh run.
+        yield* goal.stopWithReason({ sessionID, reason: "budget_tests" })
+        yield* goal.set(sessionID, { condition: "y", autonomous: true })
+        return [blocked, yield* goal.checkBudget(sessionID)] as const
       }),
     )
+    expect(AutonomyRun.getRun(run.id)?.phase).toBe("cancelled")
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toBe("budget_tests")
+    expect(nextTask.ok).toBe(true)
   })
 })

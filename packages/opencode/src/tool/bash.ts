@@ -21,6 +21,7 @@ import * as IsolatedGit from "./isolated-git-guard"
 import * as MergeConflict from "./merge-conflict-notice"
 import { RecoverableError } from "./recoverable"
 import * as ConfigReliability from "@/config/reliability"
+import { ConfigCompose } from "@/config/compose"
 import * as Existence from "@/reliability/existence"
 import { BashArity } from "@/permission/arity"
 import * as Truncate from "./truncate"
@@ -1164,7 +1165,9 @@ export const BashTool = Tool.define(
                       kind: poc ? "poc" : verification,
                       command: cmd,
                       environmentFingerprint: `${process.platform}:${process.version}`,
-                      codeRevision: codeFingerprint(Instance.worktree),
+                      codeRevision: codeFingerprint(Instance.worktree, [
+                        ConfigCompose.resolveDocsDir(Instance.worktree, "compose" in cfg ? cfg.compose : undefined),
+                      ]),
                       startedAt,
                       durationMs: Date.now() - startedAt,
                       exitCode: exit,
