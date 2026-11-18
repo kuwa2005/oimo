@@ -97,3 +97,60 @@ describe("goal judge → autonomy run completion", () => {
     expect(AutonomyRun.recordGoalStop(sessionID, "judge_failed")?.stopReason).toBe("judge_unavailable")
   })
 })
+
+describe("se ↔ fde flip mid-run", () => {
+  test("flip clears the lock; judge accept is a no-op until re-locked, then completes", async () => {
+    const { applySessionMode } = await import("../../src/autonomy/session-mode")
+    const { AutonomyGate } = await import("../../src/autonomy")
+    const { hashScopeFields } = await import("../../src/autonomy/evidence")
+    const sessionID = `ses_flip_${Date.now()}`
+    const lock = (runID: string, kind: "requirements_lock" | "solution_lock", qr: string) => {
+      const fields = {
+        objective: "flip",
+        acceptance_criteria: ["ok"],
+        in_scope: ["src"],
+        out_of_scope: [],
+        repositories: [],
+        risks: [],
+      }
+      const lockedScope = { ...fields, hash: hashScopeFields(fields) }
+      const proposal = JSON.stringify(lockedScope)
+      const gate = AutonomyGate.createGate({ runID, kind, proposalText: proposal, questionRequestID: qr, questionIndex: 0 })
+      AutonomyGate.respondToGate({ gateID: gate.id, answers: [["approved"]], proposalTextNow: proposal, lockedScope })
+    }
+    const run = applySessionMode({ mode: "se", scope: "session", sessionID, projectID: "proj_flip" }).run!
+    lock(run.id, "requirements_lock", "qr_flip_se")
+    expect(AutonomyRun.getRun(run.id)?.phase).toBe("execute")
+
+    const flipped = applySessionMode({ mode: "fde", scope: "session", sessionID, projectID: "proj_flip" })
+    expect(flipped.reLockRequired).toBe(true)
+    expect(flipped.run?.id).toBe(run.id)
+    expect(flipped.run?.phase).toBe("discover")
+    expect(flipped.run?.lockedScope).toBeUndefined()
+
+    expect(AutonomyRun.recordJudgeComplete(sessionID)?.phase).toBe("discover")
+
+    lock(run.id, "solution_lock", "qr_flip_fde")
+    const done = AutonomyRun.recordJudgeComplete(sessionID)
+    expect(done?.phase).toBe("completed")
+    expect(done?.profile).toBe("fde")
+    expect(done?.evidenceManifestID).toBeDefined()
+  })
+})
+
+describe("super_auto completion", () => {
+  test("judge accept auto-locks a super_auto run from the goal text and persists the manifest", async () => {
+    const { applySessionMode } = await import("../../src/autonomy/session-mode")
+    const { getLatestManifest } = await import("../../src/autonomy/evidence")
+    const sessionID = `ses_super_auto_${Date.now()}`
+    const run = applySessionMode({ mode: "special", scope: "session", sessionID, projectID: "proj_super_auto" }).run!
+    expect(run.profile).toBe("super_auto")
+    expect(run.phase).toBe("discover")
+
+    const done = AutonomyRun.recordJudgeComplete(sessionID, "build the thing")
+    expect(done?.phase).toBe("completed")
+    expect(done?.lockedScope?.objective).toBe("build the thing")
+    expect(done?.evidenceManifestID).toBeDefined()
+    expect(getLatestManifest(run.id)?.runID).toBe(run.id)
+  })
+})

@@ -15,7 +15,7 @@ import {
 } from "./autonomy.sql"
 import type { AutonomyProfile, LearningLens } from "./resolve"
 import * as ConfigAutonomy from "@/config/autonomy"
-import { buildManifest } from "./evidence"
+import { buildManifest, hashScopeFields } from "./evidence"
 
 const ALLOWED: Record<AutonomyPhase, AutonomyPhase[]> = {
   discover: ["lock_pending", "waiting_user", "blocked", "cancelled"],
@@ -387,10 +387,39 @@ const JUDGE_COMPLETE_STEP: Partial<Record<AutonomyPhase, AutonomyEvent>> = {
 }
 
 /**
- * The independent goal judge accepted the work: advance execute → verify → judge → completed.
- * `judge_complete` persists the evidence manifest. Runs outside these phases (e.g. lock not yet approved) are left as-is.
+ * `super_auto` skips hearing, so no lock gate ever fires. Lock the scope from the goal text
+ * (falling back to the run's user request) so completion can persist an evidence manifest.
  */
-export function recordJudgeComplete(sessionID: string): AutonomyRunRecord | undefined {
+function autoLockSuperAuto(run: AutonomyRunRecord, objective?: string): AutonomyRunRecord {
+  if (run.profile !== "super_auto" || run.phase !== "discover") return run
+  const fields = {
+    objective: (objective?.trim() || run.userRequest).slice(0, 500),
+    acceptance_criteria: [],
+    in_scope: [],
+    out_of_scope: [],
+    repositories: run.repositoryIDs,
+    risks: [],
+  }
+  const pending = transition({
+    id: run.id,
+    expectedRevision: run.revision,
+    event: { type: "lock_proposed" },
+    eventID: "super_auto_autolock",
+  })
+  return transition({
+    id: pending.id,
+    expectedRevision: pending.revision,
+    event: { type: "lock_approved", lockedScope: { ...fields, hash: hashScopeFields(fields) } },
+    eventID: "super_auto_autolock",
+  })
+}
+
+/**
+ * The independent goal judge accepted the work: advance execute → verify → judge → completed.
+ * `judge_complete` persists the evidence manifest. SE/FDE runs whose lock is not yet approved are left as-is;
+ * `super_auto` runs are auto-locked from `objective` first.
+ */
+export function recordJudgeComplete(sessionID: string, objective?: string): AutonomyRunRecord | undefined {
   const advance = (run: AutonomyRunRecord): AutonomyRunRecord => {
     const event = JUDGE_COMPLETE_STEP[run.phase]
     if (!event) return run
@@ -398,7 +427,7 @@ export function recordJudgeComplete(sessionID: string): AutonomyRunRecord | unde
   }
   const run = getLatestRunForSession(sessionID)
   if (!run) return
-  return advance(run)
+  return advance(autoLockSuperAuto(run, objective))
 }
 
 export function updateProfile(input: {

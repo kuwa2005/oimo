@@ -3476,7 +3476,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               impossible: verdict.impossible === true,
             })
-            if (verdict.ok && !verdict.impossible && !("judgeFailed" in verdict)) recordJudgeComplete(sessionID)
+            if (verdict.ok && !verdict.impossible && !("judgeFailed" in verdict)) recordJudgeComplete(sessionID, active.condition)
             yield* goal.stopWithReason({
               sessionID,
               reason: verdict.impossible ? "impossible" : "completed",
