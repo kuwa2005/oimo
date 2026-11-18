@@ -15,7 +15,7 @@ import {
 } from "./autonomy.sql"
 import type { AutonomyProfile, LearningLens } from "./resolve"
 import * as ConfigAutonomy from "@/config/autonomy"
-import { buildManifest, hashScopeFields } from "./evidence"
+import { buildManifest, hashScopeFields, type FdeMetrics } from "./evidence"
 
 const ALLOWED: Record<AutonomyPhase, AutonomyPhase[]> = {
   discover: ["lock_pending", "waiting_user", "blocked", "cancelled"],
@@ -41,7 +41,7 @@ export type AutonomyEvent =
   | { type: "implementation_done" }
   | { type: "verify_passed" }
   | { type: "verify_failed" }
-  | { type: "judge_complete" }
+  | { type: "judge_complete"; metrics?: FdeMetrics }
   | { type: "judge_rework"; next: "execute" | "verify" }
   | { type: "block"; reason: AutonomyStopReason }
   | { type: "cancel" }
@@ -230,6 +230,7 @@ export function transition(input: {
       lockedScope,
       codeRevision: String(current.revision),
       changedRepositories: lockedScope.repositories,
+      metrics: input.event.metrics,
     })
     evidenceManifestID = manifest.id
     counters = { ...counters, judgeAttempts: counters.judgeAttempts + 1 }
@@ -380,10 +381,11 @@ export function recordGoalStop(sessionID: string, reason: string): AutonomyRunRe
   })
 }
 
-const JUDGE_COMPLETE_STEP: Partial<Record<AutonomyPhase, AutonomyEvent>> = {
-  execute: { type: "implementation_done" },
-  verify: { type: "verify_passed" },
-  judge: { type: "judge_complete" },
+function judgeCompleteStep(phase: AutonomyPhase, metrics?: FdeMetrics): AutonomyEvent | undefined {
+  if (phase === "execute") return { type: "implementation_done" }
+  if (phase === "verify") return { type: "verify_passed" }
+  if (phase === "judge") return { type: "judge_complete", metrics }
+  return
 }
 
 /**
@@ -419,9 +421,13 @@ function autoLockSuperAuto(run: AutonomyRunRecord, objective?: string): Autonomy
  * `judge_complete` persists the evidence manifest. SE/FDE runs whose lock is not yet approved are left as-is;
  * `super_auto` runs are auto-locked from `objective` first.
  */
-export function recordJudgeComplete(sessionID: string, objective?: string): AutonomyRunRecord | undefined {
+export function recordJudgeComplete(
+  sessionID: string,
+  objective?: string,
+  metrics?: FdeMetrics,
+): AutonomyRunRecord | undefined {
   const advance = (run: AutonomyRunRecord): AutonomyRunRecord => {
-    const event = JUDGE_COMPLETE_STEP[run.phase]
+    const event = judgeCompleteStep(run.phase, metrics)
     if (!event) return run
     return advance(transition({ id: run.id, expectedRevision: run.revision, event, eventID: "goal_judge_ok" }))
   }

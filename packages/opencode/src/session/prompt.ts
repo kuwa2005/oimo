@@ -126,6 +126,8 @@ import { ActorTool, type ActorPromptOps } from "@/tool/actor"
 import { SessionRunState } from "./run-state"
 import { Goal } from "./goal"
 import { recordJudgeComplete } from "@/autonomy/run"
+import { FdeMetrics } from "@/autonomy/evidence"
+import { sessionAutonomyConfig } from "@/autonomy/session-mode"
 import { consumeBrief, WARM_START_MARKER } from "./warm-start"
 import { TaskRegistry } from "@/task/registry"
 import { EffectBridge } from "@/effect"
@@ -1048,7 +1050,7 @@ export const layer = Layer.effect(
         })
       }
 
-      const cfg = yield* config.get()
+      const cfg = sessionAutonomyConfig(yield* config.get(), input.session.id)
       if (ConfigAutonomy.enabled(cfg)) {
         const activeGoal = yield* goal.get(input.session.id)
         if (activeGoal?.autonomous) {
@@ -2874,7 +2876,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         yield* sessions.touch(input.sessionID)
 
         if (input.noReply !== true && input.source !== "spawn" && input.source !== "hook") {
-          const cfg = yield* config.get()
+          const cfg = sessionAutonomyConfig(yield* config.get(), input.sessionID)
           if (ConfigAutonomy.enabled(cfg)) {
             const existing = yield* goal.get(input.sessionID)
             // Do not reset an in-flight hearing/execute goal on follow-up messages.
@@ -2996,7 +2998,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         // Hearing phase stays tight (INVALID_OUTPUT_HEARING_LIMIT) so FDE discovery
         // cannot burn the larger budget before Solution Lock.
         const resolveInvalidOutputLimit = Effect.fn("SessionPrompt.resolveInvalidOutputLimit")(function* () {
-          const cfg = yield* config.get()
+          const cfg = sessionAutonomyConfig(yield* config.get(), sessionID)
           if (!ConfigAutonomy.enabled(cfg)) return INVALID_OUTPUT_CONTINUATION_LIMIT
           const active = yield* goal.get(sessionID)
           if (Goal.isHearingLike(active?.phase) && ConfigAutonomy.hearingFirst(cfg.autonomy)) {
@@ -3208,7 +3210,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const active = yield* goal.get(sessionID)
           if (!active) return false
 
-          const cfg = yield* config.get()
+          const cfg = sessionAutonomyConfig(yield* config.get(), sessionID)
           const autonomous = ConfigAutonomy.enabled(cfg) || active.autonomous
 
           const transcriptMsgs = yield* MessageV2.filterCompactedEffect(sessionID, {
@@ -3476,7 +3478,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               impossible: verdict.impossible === true,
             })
-            if (verdict.ok && !verdict.impossible && !("judgeFailed" in verdict)) recordJudgeComplete(sessionID, active.condition)
+            if (verdict.ok && !verdict.impossible && !("judgeFailed" in verdict)) {
+              const instance = yield* InstanceState.context
+              const metricsFile = path.resolve(
+                instance.worktree,
+                ConfigCompose.resolveDocsDir(instance.worktree, cfg.compose),
+                "reports",
+                "metrics.json",
+              )
+              const metrics = yield* Effect.promise(() => Bun.file(metricsFile).json().catch(() => undefined))
+              recordJudgeComplete(sessionID, active.condition, FdeMetrics.safeParse(metrics).data)
+            }
             yield* goal.stopWithReason({
               sessionID,
               reason: verdict.impossible ? "impossible" : "completed",
@@ -3531,7 +3543,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             agentName: input.lastUser.agent,
             agentID: input.lastUser.agentID,
           })
-          const cfg = yield* config.get()
+          const cfg = sessionAutonomyConfig(yield* config.get(), sessionID)
           const activeGoal = yield* goal.get(sessionID)
           const forceDocsTools =
             ConfigAutonomy.enabled(cfg) || Boolean(activeGoal?.autonomous) || ConfigAutonomy.docsEvidence(cfg.autonomy)
@@ -4869,7 +4881,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           const activeForLoop = yield* goal.get(sessionID)
-          const cfgForLoop = yield* config.get()
+          const cfgForLoop = sessionAutonomyConfig(yield* config.get(), sessionID)
           const strictNoToolLoop =
             ConfigAutonomy.enabled(cfgForLoop) || Boolean(activeForLoop?.autonomous) || Boolean(activeForLoop)
 
@@ -5086,7 +5098,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
         yield* goal.set(input.sessionID, {
           condition,
-          autonomous: ConfigAutonomy.enabled(yield* config.get()),
+          autonomous: ConfigAutonomy.enabled(sessionAutonomyConfig(yield* config.get(), input.sessionID)),
         })
       }
 

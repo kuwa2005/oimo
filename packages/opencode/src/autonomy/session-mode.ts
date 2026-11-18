@@ -5,6 +5,7 @@
 import * as AutonomyRun from "./run"
 import { resolveAutonomyRequest, legacyModeFromProfile, type AutonomyRequest } from "./resolve"
 import type { AutonomyRunRecord } from "./autonomy.sql"
+import * as ConfigAutonomy from "@/config/autonomy"
 import type { Mode } from "@/config/autonomy"
 
 export type ApplyScope = "session" | "default"
@@ -48,7 +49,20 @@ export function applySessionMode(input: ApplySessionModeInput): ApplySessionMode
   const existing = AutonomyRun.getLatestRunForSession(input.sessionID)
   if (!existing || existing.phase === "completed" || existing.phase === "cancelled") {
     if (request.profile === "off") {
-      return { request, reLockRequired: false, persistGlobal: false }
+      // Remember "off" for this session so it overrides an instance-wide autonomy default.
+      const created = AutonomyRun.createRun({
+        sessionID: input.sessionID,
+        projectID: input.projectID,
+        profile: "off",
+        learningLenses: [],
+        userRequest: input.userRequest ?? "",
+      })
+      const run = AutonomyRun.transition({
+        id: created.id,
+        expectedRevision: created.revision,
+        event: { type: "cancel" },
+      })
+      return { request, run, reLockRequired: false, persistGlobal: false }
     }
     const run = AutonomyRun.createRun({
       sessionID: input.sessionID,
@@ -67,10 +81,16 @@ export function applySessionMode(input: ApplySessionModeInput): ApplySessionMode
     (request.profile === "se" || request.profile === "fde")
 
   if (request.profile === "off") {
-    const run = AutonomyRun.transition({
+    const cancelled = AutonomyRun.transition({
       id: existing.id,
       expectedRevision: existing.revision,
       event: { type: "cancel" },
+    })
+    const run = AutonomyRun.updateProfile({
+      id: cancelled.id,
+      expectedRevision: cancelled.revision,
+      profile: "off",
+      learningLenses: [],
     })
     return { request, run, reLockRequired: false, persistGlobal: false }
   }
@@ -91,10 +111,31 @@ export function applySessionMode(input: ApplySessionModeInput): ApplySessionMode
   }
 }
 
+/**
+ * The session's latest run decides its mode; a completed run keeps its profile so the next task in the
+ * same session stays in that mode. Only runs cancelled before session-scoped "off" existed fall back.
+ */
 export function effectiveModeForSession(sessionID: string | undefined, fallbackCfgMode: Mode): Mode {
   if (!sessionID) return fallbackCfgMode
   const run = AutonomyRun.getLatestRunForSession(sessionID)
   if (!run) return fallbackCfgMode
-  if (run.phase === "completed" || run.phase === "cancelled") return fallbackCfgMode
+  if (run.phase === "cancelled" && run.profile !== "off") return fallbackCfgMode
   return legacyModeFromProfile(run.profile)
+}
+
+/**
+ * Autonomy config as one session sees it: the session's run overrides the instance config, so a
+ * session-scoped `/auto` never leaks into other sessions of the same project.
+ */
+export function sessionAutonomyConfig<
+  T extends { autonomy?: ConfigAutonomy.Info; experimental?: { auto_continue?: boolean } },
+>(cfg: T, sessionID: string | undefined): T {
+  const base = ConfigAutonomy.mode(cfg)
+  const mode = effectiveModeForSession(sessionID, base)
+  if (mode === base) return cfg
+  return {
+    ...cfg,
+    autonomy: { ...cfg.autonomy, ...ConfigAutonomy.patchForMode(mode).autonomy },
+    experimental: { ...cfg.experimental, auto_continue: false },
+  }
 }

@@ -8,6 +8,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Provider } from "../provider"
 import { Config } from "../config"
 import * as ConfigAutonomy from "../config/autonomy"
+import { sessionAutonomyConfig } from "../autonomy/session-mode"
 import { Instance } from "../project/instance"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
@@ -22,10 +23,10 @@ function getLastModel(sessionID: SessionID) {
 const skipSwitchConfirm = Effect.fn("Plan.skipSwitchConfirm")(function* (
   question: Question.Interface,
   config: Config.Interface,
+  sessionID: SessionID,
 ) {
   if (yield* question.neverAsk()) return true
-  const cfg = yield* config.get()
-  return ConfigAutonomy.enabled(cfg)
+  return ConfigAutonomy.enabled(sessionAutonomyConfig(yield* config.get(), sessionID))
 })
 
 export const PlanExitTool = Tool.define(
@@ -52,7 +53,7 @@ export const PlanExitTool = Tool.define(
           const info = yield* session.get(ctx.sessionID)
           const plan = path.relative(Instance.worktree, Session.plan(info))
 
-          if (!(yield* skipSwitchConfirm(question, config))) {
+          if (!(yield* skipSwitchConfirm(question, config, ctx.sessionID))) {
             const answers = yield* question.ask({
               sessionID: ctx.sessionID,
               questions: [

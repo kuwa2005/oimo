@@ -147,3 +147,47 @@ describe("Goal state machine", () => {
     expect(got?.react).toBe(0)
   })
 })
+
+describe("Goal ↔ session-scoped autonomy (#66, #70)", () => {
+  test("applyPersona rebuilds the condition for FDE and resets to discover on re-lock (#70)", async () => {
+    await using tmp = await tmpdir({})
+    const { buildGoalCondition } = await import("../../src/config/autonomy")
+    const seCondition = buildGoalCondition("集計を自動化して", { docsEvidence: true, hearingFirst: true, persona: "se" })
+    const got = await runGoal(tmp.path, (goal) =>
+      Effect.gen(function* () {
+        yield* goal.set(ses, { condition: seCondition, autonomous: true, phase: "execute" })
+        yield* goal.applyPersona(ses, "fde", true)
+        return yield* goal.get(ses)
+      }),
+    )
+    expect(got?.condition).toContain("Forward Deployed Engineer")
+    expect(got?.condition).toContain("集計を自動化して")
+    expect(got?.condition).not.toContain("Requirements Lock")
+    expect(got?.phase).toBe("discover")
+  })
+
+  test("checkBudget stops the goal when the run is blocked on test attempts (#66)", async () => {
+    await using tmp = await tmpdir({})
+    const { AutonomyRun } = await import("../../src/autonomy")
+    const sessionID = SessionID.make(`ses_goal_run_budget_${Date.now()}`)
+    const run = AutonomyRun.createRun({
+      sessionID,
+      projectID: "proj_goal_run_budget",
+      profile: "se",
+      learningLenses: ["se"],
+      userRequest: "x",
+      budgets: { maxTestAttempts: 1 },
+    })
+    AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
+    AutonomyRun.bumpCounter({ id: run.id, field: "testAttempts" })
+    expect(AutonomyRun.getRun(run.id)?.phase).toBe("blocked")
+    const result = await runGoal(tmp.path, (goal) =>
+      Effect.gen(function* () {
+        yield* goal.set(sessionID, { condition: "x", autonomous: true })
+        return yield* goal.checkBudget(sessionID)
+      }),
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe("budget_tests")
+  })
+})

@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { ConfigPermission } from "@/config/permission"
 import { Config } from "@/config"
 import * as ConfigAutonomy from "@/config/autonomy"
+import { sessionAutonomyConfig } from "@/autonomy/session-mode"
 import { InstanceState } from "@/effect"
 import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
@@ -466,7 +467,7 @@ export const layer = Layer.effect(
       // not fail closed while the SE agent is driving.
       if (s.skipAll && forced) {
         const cfg = yield* config.get()
-        if (!ConfigAutonomy.enabled(cfg)) {
+        if (!ConfigAutonomy.enabled(sessionAutonomyConfig(cfg, info.sessionID))) {
           const timeoutMs = skipAllForcedAskTimeoutMs()
           guarded = Effect.timeoutOrElse(guarded, {
             duration: `${timeoutMs} millis`,

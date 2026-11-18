@@ -194,8 +194,19 @@ export function respondToGate(input: {
     .run()
 
   const fresh = getRun(gate.runID)!
+  // A high-risk gate only moves the run when it paused locked execution (high_risk_proposed →
+  // waiting_user). Otherwise the answer stays on the gate alone — a gate raised before the lock
+  // must not jump the run to execute and skip Requirements/Solution Lock.
+  const pausedExecution = fresh.phase === "waiting_user" && Boolean(fresh.lockedScope)
   if (gate.kind === "high_risk_action") {
-    if (status === "approved") {
+    if (!pausedExecution) {
+      appendAudit({
+        runID: fresh.id,
+        projectID: fresh.projectID,
+        type: "high_risk_gate_unpaired",
+        detail: { gateID: gate.id, phase: fresh.phase, status },
+      })
+    } else if (status === "approved") {
       transition({
         id: fresh.id,
         expectedRevision: fresh.revision,
@@ -214,7 +225,8 @@ export function respondToGate(input: {
     const scope =
       input.lockedScope ??
       ({
-        objective: fresh.userRequest.slice(0, 500),
+        // The approved proposal is the locked requirement; the run's userRequest is often empty.
+        objective: (input.proposalTextNow.trim() || fresh.userRequest).slice(0, 2000),
         acceptance_criteria: [],
         in_scope: [],
         out_of_scope: [],
@@ -249,11 +261,12 @@ export function respondToGate(input: {
 
 export function inferGateKind(header?: string): GateKind | undefined {
   if (!header) return
+  // Lock headers win: "Solution Lock (production rollout)" is a lock, not a high-risk action.
+  if (/solution\s*lock|解決策ロック|ソリューションロック|方針確定/i.test(header)) return "solution_lock"
+  if (/requirements?\s*lock|spec\s*lock|仕様確定|要件ロック|要件確定/i.test(header)) return "requirements_lock"
   if (/high[\s_-]*risk|外部送信|production|顧客データ|credential|force\s*push|課金/i.test(header)) {
     return "high_risk_action"
   }
-  if (/solution\s*lock|解決策ロック|ソリューションロック|方針確定/i.test(header)) return "solution_lock"
-  if (/requirements?\s*lock|spec\s*lock|仕様確定|要件ロック|要件確定/i.test(header)) return "requirements_lock"
   return
 }
 
@@ -350,7 +363,7 @@ export function handleQuestionLock(input: {
   })
 
   return {
-    locked: result.status === "approved",
+    locked: result.status === "approved" && result.kind !== "high_risk_action",
     kind: result.kind,
     gateID: gate.id,
     status: result.status,

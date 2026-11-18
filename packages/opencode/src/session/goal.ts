@@ -16,6 +16,7 @@ import { SessionID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { AutonomyBridge } from "@/autonomy/bridge"
 import { getLatestRunForSession, recordGoalReentry, recordGoalStop } from "@/autonomy/run"
+import { sessionAutonomyConfig } from "@/autonomy/session-mode"
 import type { GoalPhase } from "./goal-ref"
 import { canonicalizeGoalPhase } from "./goal-ref"
 
@@ -41,7 +42,16 @@ export type GoalStopReason =
   | "budget_turns"
   | "budget_duration"
   | "budget_cost"
+  | "budget_tests"
   | "judge_failed"
+
+const RUN_BUDGET_STOP: Partial<Record<string, GoalStopReason>> = {
+  budget_test_attempts: "budget_tests",
+  budget_model_turns: "budget_turns",
+  budget_judge_attempts: "judge_failed",
+  budget_duration: "budget_duration",
+  budget_cost: "budget_cost",
+}
 
 export type Goal = {
   condition: string
@@ -175,6 +185,12 @@ export interface Interface {
   /** Promote an in-flight goal into Super Auto (special): execute phase + rewritten condition. */
   readonly enterSpecial: (sessionID: SessionID) => Effect.Effect<Goal | undefined>
   readonly enterSpecialAll: () => Effect.Effect<number>
+  /** Rebuild an existing goal's condition for a session-scoped `/auto se|fde` switch; resets to discover when a re-lock is required. */
+  readonly applyPersona: (
+    sessionID: SessionID,
+    persona: ConfigAutonomy.Persona,
+    reLockRequired: boolean,
+  ) => Effect.Effect<Goal | undefined>
   /** Increment the re-entry counter, returning the new count. */
   readonly bumpReact: (sessionID: SessionID) => Effect.Effect<number>
   readonly addCost: (sessionID: SessionID, deltaUsd: number) => Effect.Effect<void>
@@ -265,7 +281,7 @@ export const layer = Layer.effect(
     })
 
     const set = Effect.fn("SessionGoal.set")(function* (sessionID: SessionID, input: SetGoalInput) {
-      const cfg = yield* config.get()
+      const cfg = sessionAutonomyConfig(yield* config.get(), sessionID)
       const limits = input.limits ?? ConfigAutonomy.limits(cfg.autonomy)
       const autonomous = input.autonomous ?? false
       const phase = canonicalizeGoalPhase(
@@ -365,6 +381,28 @@ export const layer = Layer.effect(
       return goal
     })
 
+    const applyPersona = Effect.fn("SessionGoal.applyPersona")(function* (
+      sessionID: SessionID,
+      persona: ConfigAutonomy.Persona,
+      reLockRequired: boolean,
+    ) {
+      const data = yield* InstanceState.get(state)
+      const goal = data.goals.get(sessionID)
+      if (!goal) return undefined
+      const cfg = yield* config.get()
+      const userText = ConfigAutonomy.extractUserRequest(goal.condition) ?? goal.condition.slice(0, 2000)
+      goal.condition = ConfigAutonomy.buildGoalCondition(userText, {
+        docsEvidence: ConfigAutonomy.docsEvidence(cfg.autonomy),
+        hearingFirst: true,
+        persona,
+      })
+      goal.autonomous = true
+      if (reLockRequired) goal.phase = "discover"
+      yield* elog.info("goal apply persona", { sessionID, persona, reLockRequired })
+      yield* publish({ sessionID, goal })
+      return goal
+    })
+
     const enterSpecialAll = Effect.fn("SessionGoal.enterSpecialAll")(function* () {
       const data = yield* InstanceState.get(state)
       let n = 0
@@ -450,6 +488,10 @@ export const layer = Layer.effect(
       const data = yield* InstanceState.get(state)
       const goal = data.goals.get(sessionID)
       if (!goal) return { ok: true as const }
+      // The durable run may already be blocked on a budget the goal does not track (e.g. test attempts).
+      const run = getLatestRunForSession(sessionID)
+      const runReason = run?.phase === "blocked" && run.stopReason ? RUN_BUDGET_STOP[run.stopReason] : undefined
+      if (runReason) return { ok: false as const, reason: runReason }
       if (goal.react >= goal.maxTurns) return { ok: false as const, reason: "budget_turns" as const }
       if (Date.now() - goal.startedAt >= goal.maxDurationMs)
         return { ok: false as const, reason: "budget_duration" as const }
@@ -630,6 +672,7 @@ export const layer = Layer.effect(
       clear,
       setPhase,
       enterSpecial,
+      applyPersona,
       enterSpecialAll,
       bumpReact,
       addCost,

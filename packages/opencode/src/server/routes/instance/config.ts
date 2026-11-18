@@ -7,7 +7,7 @@ import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Goal } from "@/session/goal"
 import { Instance } from "@/project/instance"
-import { applySessionMode } from "@/autonomy/session-mode"
+import { applySessionMode, sessionAutonomyConfig } from "@/autonomy/session-mode"
 import { SessionID } from "@/session/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
@@ -120,8 +120,12 @@ export const ConfigRoutes = lazy(() =>
           })
 
           const cfg = yield* Config.Service
-          // In-memory overlay so prompts see the mode; global write only for scope=default.
-          const config = yield* cfg.setAutonomyMode(mode, { persistGlobal: applied.persistGlobal })
+          // scope=default updates the instance overlay (and global file). scope=session lives only in the
+          // session's AutonomyRun; the response config is that session's view, never written to shared state.
+          const config =
+            scope === "default"
+              ? yield* cfg.setAutonomyMode(mode, { persistGlobal: applied.persistGlobal })
+              : sessionAutonomyConfig(yield* cfg.get(), sessionID)
 
           const question = yield* Question.Service
           const permission = yield* Permission.Service
@@ -134,12 +138,21 @@ export const ConfigRoutes = lazy(() =>
             yield* question.setNeverAsk(false)
             yield* permission.setSkipAll(false)
           }
-          let goalsPromoted = 0
+          const goal = yield* Goal.Service
+          const goalsPromoted =
+            mode === "special"
+              ? scope === "session" && sessionID
+                ? (yield* goal.enterSpecial(SessionID.make(sessionID)))
+                  ? 1
+                  : 0
+                : yield* goal.enterSpecialAll()
+              : 0
           if (mode === "special") {
             yield* question.setNeverAsk(true)
             yield* permission.setSkipAll(true)
-            const goal = yield* Goal.Service
-            goalsPromoted = yield* goal.enterSpecialAll()
+          }
+          if ((mode === "se" || mode === "normal" || mode === "fde") && scope === "session" && sessionID) {
+            yield* goal.applyPersona(SessionID.make(sessionID), mode === "fde" ? "fde" : "se", applied.reLockRequired)
           }
 
           return {

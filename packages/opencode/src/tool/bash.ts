@@ -1121,6 +1121,7 @@ export const BashTool = Tool.define(
                 }
               }
 
+              const startedAt = Date.now()
               return yield* run(
                 {
                   shell,
@@ -1136,14 +1137,20 @@ export const BashTool = Tool.define(
               ).pipe(
                 Effect.tap((result) =>
                   Effect.gen(function* () {
-                    if (!/\b(bun\s+test|npm\s+test|vitest|jest|typecheck|pytest)\b/i.test(params.command)) return
+                    const { classifyVerificationCommand, recordTestAttempt, failureSignature, classifyFailure } =
+                      yield* Effect.promise(() => import("@/autonomy/test-attempt"))
+                    const verification = classifyVerificationCommand(params.command)
+                    if (!verification) return
                     const { getLatestRunForSession, bumpCounter } = yield* Effect.promise(() => import("@/autonomy/run"))
                     const arun = getLatestRunForSession(ctx.sessionID)
                     if (!arun) return
-                    if (arun.phase !== "verify" && arun.phase !== "judge" && arun.phase !== "execute") return
-                    const { recordTestAttempt, failureSignature, classifyFailure } = yield* Effect.promise(
-                      () => import("@/autonomy/test-attempt"),
-                    )
+                    const executing = arun.phase === "verify" || arun.phase === "judge" || arun.phase === "execute"
+                    // FDE allows PoC spikes before Solution Lock: record them as evidence, never against the budget.
+                    const poc =
+                      arun.profile === "fde" &&
+                      !arun.lockedScope &&
+                      (arun.phase === "discover" || arun.phase === "lock_pending" || arun.phase === "waiting_user")
+                    if (!executing && !poc) return
                     const exit = typeof result.metadata.exit === "number" ? result.metadata.exit : null
                     const status =
                       exit === null
@@ -1154,11 +1161,12 @@ export const BashTool = Tool.define(
                     const cmd = ["bash", "-lc", params.command]
                     recordTestAttempt({
                       runID: arun.id,
+                      kind: poc ? "poc" : verification,
                       command: cmd,
                       environmentFingerprint: `${process.platform}:${process.version}`,
                       codeRevision: String(arun.revision),
-                      startedAt: Date.now(),
-                      durationMs: 0,
+                      startedAt,
+                      durationMs: Date.now() - startedAt,
                       exitCode: exit,
                       status,
                       failureSignature: failureSignature({
@@ -1171,7 +1179,8 @@ export const BashTool = Tool.define(
                         stderr: String(result.metadata.output ?? ""),
                       }),
                     })
-                    bumpCounter({ id: arun.id, field: "testAttempts" })
+                    // Only real test runs count against maxTestAttempts; typecheck/lint and PoC do not.
+                    if (!poc && verification === "test") bumpCounter({ id: arun.id, field: "testAttempts" })
                   }),
                 ),
               )

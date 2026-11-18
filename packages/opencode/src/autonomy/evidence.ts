@@ -4,8 +4,21 @@
 import { createHash, randomBytes } from "crypto"
 import { Database, eq, desc } from "@/storage"
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
+import z from "zod"
 import type { LockedScope } from "./autonomy.sql"
 import { freshPassingAttempts, listTestAttempts, type TestAttemptRecord } from "./test-attempt"
+
+/** FDE Before/After measurement, read from `<compose docs>/reports/metrics.json` when present. */
+export const FdeMetrics = z.array(
+  z.object({
+    name: z.string(),
+    before: z.union([z.number(), z.string()]),
+    after: z.union([z.number(), z.string()]),
+    unit: z.string().optional(),
+    method: z.string().optional(),
+  }),
+)
+export type FdeMetrics = z.infer<typeof FdeMetrics>
 
 export type AcceptanceStatus = "met" | "not_met" | "blocked" | "not_applicable"
 
@@ -21,6 +34,9 @@ export type AutonomyEvidenceManifest = {
     status: AcceptanceStatus
   }>
   testAttemptIDs: string[]
+  /** FDE pre-lock PoC/spike runs (never counted as verification). */
+  pocAttemptIDs?: string[]
+  metrics?: FdeMetrics
   securityChecks: string[]
   unresolved: string[]
   generatedAt: number
@@ -56,9 +72,11 @@ export function buildManifest(input: {
   codeRevision: string
   securityCheckIDs?: string[]
   criterionEvidence?: Record<string, { evidenceIDs: string[]; status: AcceptanceStatus }>
+  metrics?: FdeMetrics
 }): AutonomyEvidenceManifest {
   const attempts = freshPassingAttempts({ runID: input.runID, codeRevision: input.codeRevision })
-  const all = listTestAttempts(input.runID)
+  const listed = listTestAttempts(input.runID)
+  const all = listed.filter((a) => a.kind !== "poc")
   const unresolved: string[] = []
 
   if (attempts.length === 0 && all.some((a) => a.status !== "passed")) {
@@ -87,6 +105,8 @@ export function buildManifest(input: {
     changedFiles: input.changedFiles ?? [],
     acceptance,
     testAttemptIDs: all.map((a) => a.id),
+    pocAttemptIDs: listed.filter((a) => a.kind === "poc").map((a) => a.id),
+    metrics: input.metrics,
     securityChecks: input.securityCheckIDs ?? [],
     unresolved,
     generatedAt: Date.now(),

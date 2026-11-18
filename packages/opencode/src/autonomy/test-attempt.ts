@@ -7,6 +7,20 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
 
 export type TestAttemptStatus = "passed" | "failed" | "timed_out" | "cancelled" | "infra_error"
 
+/** test: counted against maxTestAttempts. check: typecheck/lint (recorded, not counted). poc: FDE pre-lock spike. */
+export type TestAttemptKind = "test" | "check" | "poc"
+
+const TEST_COMMAND_RE =
+  /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?test|npx\s+(?:vitest|jest|playwright\s+test)|vitest|jest|pytest|python3?\s+-m\s+(?:pytest|unittest)|go\s+test|cargo\s+test|node\s+--test|deno\s+test|make\s+(?:test|check)|mvn\s+(?:-\S+\s+)*test|gradlew?\s+(?:\S+\s+)*test|phpunit|rspec|dotnet\s+test)\b/i
+const CHECK_COMMAND_RE = /(?:^|[\s;&|(])(?:(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?typecheck|tsc\s+(?:\S+\s+)*--noEmit|tsgo\s+(?:\S+\s+)*--noEmit)\b/i
+
+/** Classify a shell command as a verification run; undefined when it is neither a test nor a check. */
+export function classifyVerificationCommand(command: string): Exclude<TestAttemptKind, "poc"> | undefined {
+  if (TEST_COMMAND_RE.test(command)) return "test"
+  if (CHECK_COMMAND_RE.test(command)) return "check"
+  return
+}
+
 export type FailureClass =
   | "product_failure"
   | "test_failure"
@@ -19,6 +33,7 @@ export type FailureClass =
 export type TestAttemptRecord = {
   id: string
   runID: string
+  kind?: TestAttemptKind
   command: string[]
   cwdRepositoryID?: string
   environmentFingerprint: string
@@ -38,6 +53,7 @@ export const AutonomyTestAttemptTable = sqliteTable(
   {
     id: text().primaryKey(),
     run_id: text().notNull(),
+    kind: text().$type<TestAttemptKind>().notNull().default("test"),
     command: text({ mode: "json" }).$type<string[]>().notNull(),
     cwd_repository_id: text(),
     environment_fingerprint: text().notNull(),
@@ -97,6 +113,7 @@ export function recordTestAttempt(input: Omit<TestAttemptRecord, "id"> & { id?: 
     .values({
       id,
       run_id: input.runID,
+      kind: input.kind ?? "test",
       command: input.command,
       cwd_repository_id: input.cwdRepositoryID,
       environment_fingerprint: input.environmentFingerprint,
@@ -124,6 +141,7 @@ export function listTestAttempts(runID: string): TestAttemptRecord[] {
     .map((row) => ({
       id: row.id,
       runID: row.run_id,
+      kind: row.kind,
       command: row.command,
       cwdRepositoryID: row.cwd_repository_id ?? undefined,
       environmentFingerprint: row.environment_fingerprint,
@@ -193,6 +211,6 @@ export function freshPassingAttempts(input: {
   codeRevision: string
 }): TestAttemptRecord[] {
   return listTestAttempts(input.runID).filter(
-    (a) => a.status === "passed" && a.codeRevision === input.codeRevision,
+    (a) => a.kind !== "poc" && a.status === "passed" && a.codeRevision === input.codeRevision,
   )
 }

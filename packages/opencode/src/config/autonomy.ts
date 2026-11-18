@@ -238,7 +238,7 @@ export function buildGoalCondition(
         "3. Proposed Solution: Level 1–3 options considered and the chosen path with rationale",
         "4. PoC / spike evidence when a PoC was warranted (what was tried and what it proved), or an explicit reason none was needed",
         "5. Implementation covering the locked solution scope",
-        "6. Verification: tests EXECUTED (or honest blockers) with commands and results; Before/After metrics when measurable",
+        "6. Verification: tests EXECUTED (or honest blockers) with commands and results; Before/After metrics when measurable (also save them as `reports/metrics.json`: [{ name, before, after, unit?, method? }])",
         "7. Next Improvement: at most 3 prioritized follow-ups (do not dump a long backlog)",
         "Save under the compose docs dir (`specs/`, `plans/`, `reports/`). A later reader must see how the field problem was solved from the docs alone.",
       )

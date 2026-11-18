@@ -6,6 +6,7 @@ import { Bus } from "@/bus"
 import { Metrics } from "@/metrics"
 import { Config } from "@/config"
 import * as ConfigAutonomy from "@/config/autonomy"
+import { sessionAutonomyConfig } from "@/autonomy/session-mode"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
@@ -291,7 +292,7 @@ export const layer: Layer.Layer<
         const detail = describeTryBest(incident)
         // Multi-file implementation legitimately chains edits before verify. Under
         // autonomy, nudge instead of hard-pausing the turn (which felt like a stop).
-        if (incident.reason === "action_streak" && ConfigAutonomy.enabled(cfg)) {
+        if (incident.reason === "action_streak" && ConfigAutonomy.enabled(sessionAutonomyConfig(cfg, input.sessionID))) {
           yield* session.updatePart({
             id: PartID.ascending(),
             messageID: ctx.assistantMessage.id,

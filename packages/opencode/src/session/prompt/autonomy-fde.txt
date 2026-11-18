@@ -39,6 +39,7 @@ Leave Human-in-the-loop for high-risk actions (payments, contracts, PII, deletes
 
 Report shape (docs under compose specs/plans/reports):
 - Understanding / Current Problem / Proposed Solution (L1–3 + choice) / Implementation / Verification (commands + results; Before/After when measurable) / Next Improvement (max 3, prioritized)
+- When Before/After is measured, also write it to `reports/metrics.json` in the compose docs dir as `[{ "name": ..., "before": ..., "after": ..., "unit": ..., "method": ... }]` so it is kept in the evidence manifest.
 
 Autonomous for safe work; do not stop to ask "may I continue?" when the next step is obvious. Confirm only for production-destructive, external-send, billing, or security-setting changes.
 
