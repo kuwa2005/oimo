@@ -1,6 +1,6 @@
 {
   "name": "@mimo-ai/function",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
